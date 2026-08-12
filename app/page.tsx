@@ -1,16 +1,34 @@
+import { ChallengeProvider } from "@/components/challenge-provider";
+import { Header } from "@/components/header";
+import { Hero } from "@/components/hero";
+import { CountdownSection } from "@/components/countdown";
+import { CurrentItem } from "@/components/current-item";
+import { ScoreboardSection } from "@/components/scoreboard";
+import { TradeJourney } from "@/components/trade-journey";
+import { HowItWorks } from "@/components/how-it-works";
+import RulesSection from "@/components/rules";
+import { FaqSection } from "@/components/faq";
+import { FollowSection } from "@/components/follow-section";
+import { Footer } from "@/components/footer";
+
 export default function Home() {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-24 text-center">
-      <p className="text-xs uppercase tracking-[0.35em] text-neutral-400">
-        A Trade Challenge by Spud
-      </p>
-      <h1 className="text-5xl font-bold sm:text-7xl">ONE → FIVE</h1>
-      <p className="text-xl text-neutral-200 sm:text-2xl">
-        $1 → $5,000,000 in 21 Days
-      </p>
-      <p className="text-sm uppercase tracking-[0.25em] text-neutral-500">
-        21 Days. Only Trades.
-      </p>
-    </main>
+    <div id="top">
+      <Header />
+      <main>
+        <ChallengeProvider>
+          <Hero />
+          <CountdownSection />
+          <CurrentItem />
+          <ScoreboardSection />
+          <TradeJourney />
+        </ChallengeProvider>
+        <HowItWorks />
+        <RulesSection />
+        <FaqSection />
+        <FollowSection />
+      </main>
+      <Footer />
+    </div>
   );
 }
