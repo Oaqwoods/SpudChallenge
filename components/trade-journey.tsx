@@ -4,12 +4,13 @@ import Image from "next/image";
 import { useChallenge } from "@/components/challenge-provider";
 import { DEFAULT_SETTINGS, type PublicTrade } from "@/lib/challenge";
 import { publicMediaUrl } from "@/lib/supabase";
-import { formatDate, formatUsd } from "@/lib/format";
+import { formatDate, formatSignedUsd, formatUsd } from "@/lib/format";
 import { Panel, SectionHeading } from "@/components/ui";
 
 function TradeCard({ trade }: { trade: PublicTrade }) {
   const { mediaByTrade } = useChallenge();
   const media = (mediaByTrade[trade.id] ?? []).slice(0, 3);
+  const delta = trade.incoming_value - trade.outgoing_value;
 
   return (
     <Panel className="p-5">
@@ -32,6 +33,12 @@ function TradeCard({ trade }: { trade: PublicTrade }) {
           <p className="text-xs text-mint">{formatUsd(trade.incoming_value)}</p>
         </div>
       </div>
+      <p className="mt-3 font-display text-[9px] sm:text-[10px]">
+        <span className="text-faded">VALUE CHANGE </span>
+        <span className={delta >= 0 ? "text-mint" : "text-alert"}>
+          {formatSignedUsd(delta)}
+        </span>
+      </p>
       {trade.btc_amount != null ? (
         <p className="mt-3 text-xs text-faded">
           BTC {trade.btc_amount} · valued {formatUsd(trade.btc_usd_value ?? 0)} at
@@ -47,6 +54,9 @@ function TradeCard({ trade }: { trade: PublicTrade }) {
       </p>
       {trade.public_story ? (
         <p className="mt-3 text-sm leading-relaxed text-foreground">{trade.public_story}</p>
+      ) : null}
+      {trade.public_participant_name ? (
+        <p className="mt-2 text-xs text-faded">Traded with {trade.public_participant_name}</p>
       ) : null}
       {media.length > 0 ? (
         <div className="mt-4 grid grid-cols-3 gap-2">
@@ -76,8 +86,29 @@ export function TradeJourney() {
     <section id="journey" aria-labelledby="journey-heading" className="mx-auto max-w-3xl px-4 py-8">
       <SectionHeading id="journey-heading">Trade Journey</SectionHeading>
       <div className="mt-4 overflow-x-auto border-[3px] border-edge bg-panel px-4 py-3">
-        <p className="whitespace-nowrap font-display text-[10px] text-foreground sm:text-xs">
-          {chain.join(" → ")} → <span className="text-accent">???</span>
+        <p className="whitespace-nowrap font-display text-[10px] sm:text-xs">
+          {chain.map((item, i) => (
+            <span key={i}>
+              {i > 0 ? (
+                <span aria-hidden="true" className="text-faded">
+                  {" "}
+                  →{" "}
+                </span>
+              ) : null}
+              <span
+                className={
+                  i === chain.length - 1 && trades.length > 0 ? "text-accent" : "text-foreground"
+                }
+              >
+                {item}
+              </span>
+            </span>
+          ))}
+          <span aria-hidden="true" className="text-faded">
+            {" "}
+            →{" "}
+          </span>
+          <span className="text-accent">???</span>
         </p>
       </div>
       <div className="mt-4 flex flex-col gap-4">

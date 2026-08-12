@@ -24,3 +24,10 @@ export function formatDate(iso: string): string {
     year: "numeric",
   }).format(date);
 }
+
+export function formatSignedUsd(value: number): string {
+  if (!Number.isFinite(value)) return "$0";
+  if (value > 0) return `+${formatUsd(value)}`;
+  if (value < 0) return `-${formatUsd(Math.abs(value))}`;
+  return formatUsd(0);
+}
