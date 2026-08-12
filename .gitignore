@@ -37,6 +37,9 @@ yarn-error.log*
 # agent tooling state
 .qwen/
 
+# supabase CLI local state (project link, cached versions)
+supabase/.temp/
+
 # vercel
 .vercel
 
