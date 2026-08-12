@@ -93,11 +93,18 @@ Note: `offer-upload`/`submit-offer` reuse `PREFERENCE_TOKEN_SECRET` (with
 domain separation) for the photo submit-token HMAC — no additional secret
 required.
 
-Browser uploads to Supabase Storage require the site origins in
-**Project Settings → API → Allowed CORS origins**:
-`https://spudchallenge.online`, `https://<your-username>.github.io`,
-`http://localhost:3000`.
+### CORS (no dashboard configuration needed)
+
+Verified against current Supabase behavior:
+
+- **Edge Functions** enforce CORS in code (`functions/_shared/cors.ts`):
+  exact allowlist — `https://spudchallenge.online`,
+  `https://oaqwoods.github.io`, `http://localhost:3000` — no wildcards,
+  `OPTIONS` preflight handled, disallowed origins 403 on POST.
+- **Supabase Storage** serves its own platform-level CORS (token-authorized
+  signed uploads), so browser photo uploads via `uploadToSignedUrl` work
+  without any project setting. There is no "Allowed CORS origins" dashboard
+  setting to configure.
 
 Functions are Deno code and are intentionally excluded from the app's
-`tsc`/ESLint scope. CORS is restricted to the production origin, localhost
-dev, and the `*.github.io` preview host.
+`tsc`/ESLint scope.

@@ -1,20 +1,28 @@
 // CORS allowlist for public Edge Function endpoints (spec §1B, §34).
-// The production origin is always allowed; the GitHub Pages preview host and
-// local dev are included for testing only.
+//
+// Supabase Edge Functions enforce CORS in function code — there is no
+// dashboard "Allowed CORS origins" setting for functions. Supabase Storage
+// serves its own platform-level CORS for signed uploads (authorized by
+// the short-lived token, not the origin), so no configuration is needed there.
+//
+// Only exact application origins are allowed. No wildcards. Requests from any
+// other origin get a non-matching allow-origin on preflight (browser blocks
+// the response) and a 403 on the actual POST.
 
-const ALLOWED_ORIGINS: Array<string | RegExp> = [
-  "https://spudchallenge.online",
-  "http://localhost:3000",
-  /^https:\/\/[a-z0-9][a-z0-9-]*\.github\.io$/,
-];
+const ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
+  "https://spudchallenge.online", // production
+  "https://oaqwoods.github.io", // GitHub Pages preview/testing deployment
+  "http://localhost:3000", // local development
+]);
 
 export function isOriginAllowed(origin: string): boolean {
-  return ALLOWED_ORIGINS.some((entry) =>
-    typeof entry === "string" ? entry === origin : entry.test(origin),
-  );
+  return ALLOWED_ORIGINS.has(origin);
 }
 
 export function corsHeaders(origin: string | null): Record<string, string> {
+  // Never reflect an unknown/disallowed origin and never emit "*": fall back
+  // to the fixed production origin, which browsers will not match against a
+  // foreign page's origin.
   const allowed =
     origin && isOriginAllowed(origin) ? origin : "https://spudchallenge.online";
   return {
