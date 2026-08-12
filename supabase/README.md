@@ -49,3 +49,42 @@ insert into public.app_admins (user_id) values ('<admin auth user uuid>');
 `btc_valuation_source` (public recordkeeping) and `btc_wallet_address`,
 `btc_transaction_id` (private verification only — excluded from every public
 view). See build spec §38.
+
+## Edge Functions (playbook PROMPT 6)
+
+| Function | Purpose |
+| --- | --- |
+| `follow-signup` | Public email-preference capture: validation, honeypot, rate limiting, upsert with resubscribe semantics, guarded Resend confirmation |
+| `email-preferences` | Signed-token unsubscribe (`action: "unsubscribe"`); unsubscribing auto-removes the follower from the public wall via the view filter |
+
+Shared helpers live in `functions/_shared/` (email validation, HMAC
+preference tokens, CORS allowlist, rate limiting, Resend client). The pure
+helpers are unit-tested from `tests/preferences.test.ts`.
+
+### Required secrets
+
+```bash
+# one-time, generates the HMAC secret for unsubscribe tokens
+supabase secrets set PREFERENCE_TOKEN_SECRET=$(openssl rand -hex 32)
+```
+
+### Optional (email sending; functions fail gracefully without it)
+
+```bash
+supabase secrets set RESEND_API_KEY=...
+supabase secrets set RESEND_FROM="ONE → FIVE <hello@spudchallenge.online>"
+supabase secrets set PUBLIC_SITE_URL=https://spudchallenge.online
+```
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
+
+### Deploy
+
+```bash
+supabase functions deploy follow-signup
+supabase functions deploy email-preferences
+```
+
+Functions are Deno code and are intentionally excluded from the app's
+`tsc`/ESLint scope. CORS is restricted to the production origin, localhost
+dev, and the `*.github.io` preview host.

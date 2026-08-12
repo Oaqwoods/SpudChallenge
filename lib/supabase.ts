@@ -19,3 +19,35 @@ export function getSupabase(): SupabaseClient | null {
 export function publicMediaUrl(storagePath: string): string {
   return `${url ?? ""}/storage/v1/object/public/trade-media/${storagePath}`;
 }
+
+export function edgeFunctionUrl(name: string): string | null {
+  if (!url) return null;
+  return `${url}/functions/v1/${name}`;
+}
+
+// POST to a Supabase Edge Function with the public anon key. The anon key is
+// public by design; authorization is enforced inside the function/RLS.
+export async function callEdgeFunction<T>(name: string, body: unknown): Promise<T> {
+  const endpoint = edgeFunctionUrl(name);
+  if (!endpoint || !anonKey) {
+    throw new Error("Signup is not available yet. Please try again later.");
+  }
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${anonKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+  let data: { error?: string } | null = null;
+  try {
+    data = (await res.json()) as { error?: string } | null;
+  } catch {
+    data = null;
+  }
+  if (!res.ok) {
+    throw new Error(data?.error ?? `Request failed (${res.status}). Please try again.`);
+  }
+  return data as T;
+}

@@ -6,6 +6,7 @@ import {
   toSettings,
   toTrade,
   type ChallengeData,
+  type FollowerWallEntry,
   type TradeMedia,
 } from "./challenge";
 
@@ -16,14 +17,30 @@ export async function fetchChallengeData(): Promise<ChallengeData> {
   }
 
   try {
-    const [settingsRes, tradesRes, countRes] = await Promise.all([
+    const [settingsRes, tradesRes, countRes, wallRes] = await Promise.all([
       supabase.from("public_challenge_settings").select("*").maybeSingle(),
       supabase.from("public_trades").select("*").order("trade_number", { ascending: true }),
       supabase.from("public_follower_count").select("follower_count").maybeSingle(),
+      supabase
+        .from("public_follower_wall")
+        .select("public_display_name, public_general_location, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50),
     ]);
     if (settingsRes.error) throw settingsRes.error;
     if (tradesRes.error) throw tradesRes.error;
     if (countRes.error) throw countRes.error;
+    if (wallRes.error) throw wallRes.error;
+
+    const followerWall: FollowerWallEntry[] = (
+      (wallRes.data ?? []) as Record<string, unknown>[]
+    )
+      .map((row) => ({
+        public_display_name: str(row.public_display_name),
+        public_general_location: str(row.public_general_location),
+        created_at: str(row.created_at),
+      }))
+      .filter((entry): entry is FollowerWallEntry => entry.public_display_name !== null);
 
     const trades = ((tradesRes.data ?? []) as Record<string, unknown>[]).map(toTrade);
 
@@ -55,6 +72,7 @@ export async function fetchChallengeData(): Promise<ChallengeData> {
       trades,
       mediaByTrade,
       followerCount: countRes.data ? num((countRes.data as { follower_count?: unknown }).follower_count) : null,
+      followerWall,
       error: null,
     };
   } catch (err) {

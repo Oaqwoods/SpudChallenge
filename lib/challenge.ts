@@ -52,12 +52,19 @@ export interface TradeMedia {
   sort_order: number;
 }
 
+export interface FollowerWallEntry {
+  public_display_name: string;
+  public_general_location: string | null;
+  created_at: string | null;
+}
+
 export interface ChallengeData {
   configured: boolean;
   settings: ChallengeSettings | null;
   trades: PublicTrade[];
   mediaByTrade: Record<string, TradeMedia[]>;
   followerCount: number | null;
+  followerWall: FollowerWallEntry[];
   error: string | null;
 }
 
@@ -89,6 +96,7 @@ export const EMPTY_DATA: ChallengeData = {
   trades: [],
   mediaByTrade: {},
   followerCount: null,
+  followerWall: [],
   error: null,
 };
 

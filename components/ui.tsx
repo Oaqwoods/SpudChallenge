@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 export function SectionHeading({
   id,
@@ -21,12 +21,10 @@ export function SectionHeading({
 export function Panel({
   className = "",
   children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
+  ...rest
+}: { className?: string; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`border-[3px] border-edge bg-panel ${className}`}>
+    <div className={`border-[3px] border-edge bg-panel ${className}`} {...rest}>
       {children}
     </div>
   );
