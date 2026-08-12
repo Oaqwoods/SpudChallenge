@@ -1,4 +1,6 @@
-import { getSupabase } from "./supabase";
+// Pure challenge-state types and logic. No Supabase imports here — this
+// module is unit-tested directly under Node. Data fetching lives in
+// lib/fetch-challenge.ts.
 
 export type ChallengePhase = "prelaunch" | "active" | "complete";
 
@@ -90,7 +92,7 @@ export const EMPTY_DATA: ChallengeData = {
   error: null,
 };
 
-function num(value: unknown, fallback = 0): number {
+export function num(value: unknown, fallback = 0): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
   if (typeof value === "string" && value.trim() !== "") {
     const parsed = Number(value);
@@ -99,11 +101,11 @@ function num(value: unknown, fallback = 0): number {
   return fallback;
 }
 
-function str(value: unknown): string | null {
+export function str(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function toSettings(row: Record<string, unknown>): ChallengeSettings {
+export function toSettings(row: Record<string, unknown>): ChallengeSettings {
   const status = str(row.status);
   return {
     title: str(row.title) ?? DEFAULT_SETTINGS.title,
@@ -126,7 +128,7 @@ function toSettings(row: Record<string, unknown>): ChallengeSettings {
   };
 }
 
-function toTrade(row: Record<string, unknown>): PublicTrade {
+export function toTrade(row: Record<string, unknown>): PublicTrade {
   return {
     id: str(row.id) ?? "",
     trade_number: num(row.trade_number),
@@ -146,63 +148,6 @@ function toTrade(row: Record<string, unknown>): PublicTrade {
     completed_at: str(row.completed_at) ?? "",
     published_at: str(row.published_at),
   };
-}
-
-export async function fetchChallengeData(): Promise<ChallengeData> {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return { ...EMPTY_DATA, error: "Supabase is not configured yet." };
-  }
-
-  try {
-    const [settingsRes, tradesRes, countRes] = await Promise.all([
-      supabase.from("public_challenge_settings").select("*").maybeSingle(),
-      supabase.from("public_trades").select("*").order("trade_number", { ascending: true }),
-      supabase.from("public_follower_count").select("follower_count").maybeSingle(),
-    ]);
-    if (settingsRes.error) throw settingsRes.error;
-    if (tradesRes.error) throw tradesRes.error;
-    if (countRes.error) throw countRes.error;
-
-    const trades = ((tradesRes.data ?? []) as Record<string, unknown>[]).map(toTrade);
-
-    const mediaByTrade: Record<string, TradeMedia[]> = {};
-    if (trades.length > 0) {
-      const mediaRes = await supabase
-        .from("public_trade_media")
-        .select("*")
-        .order("sort_order", { ascending: true });
-      if (!mediaRes.error) {
-        for (const row of (mediaRes.data ?? []) as Record<string, unknown>[]) {
-          const tradeId = str(row.trade_id);
-          if (!tradeId) continue;
-          const media: TradeMedia = {
-            id: str(row.id) ?? "",
-            trade_id: tradeId,
-            storage_path: str(row.storage_path) ?? "",
-            alt_text: str(row.alt_text),
-            sort_order: num(row.sort_order),
-          };
-          (mediaByTrade[tradeId] ??= []).push(media);
-        }
-      }
-    }
-
-    return {
-      configured: true,
-      settings: settingsRes.data ? toSettings(settingsRes.data as Record<string, unknown>) : null,
-      trades,
-      mediaByTrade,
-      followerCount: countRes.data ? num((countRes.data as { follower_count?: unknown }).follower_count) : null,
-      error: null,
-    };
-  } catch (err) {
-    return {
-      ...EMPTY_DATA,
-      configured: true,
-      error: err instanceof Error ? err.message : "Failed to load challenge data.",
-    };
-  }
 }
 
 // Combines the authoritative stored status with the clock: an active challenge
