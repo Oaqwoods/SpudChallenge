@@ -25,6 +25,20 @@ export function edgeFunctionUrl(name: string): string | null {
   return `${url}/functions/v1/${name}`;
 }
 
+// Error carrying the HTTP status and parsed JSON payload so callers can react
+// to structured failure codes (e.g. current_item_changed).
+export class EdgeFunctionError extends Error {
+  status: number;
+  payload: { error?: string; code?: string } | null;
+
+  constructor(message: string, status: number, payload: { error?: string; code?: string } | null) {
+    super(message);
+    this.name = "EdgeFunctionError";
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
 // POST to a Supabase Edge Function with the public anon key. The anon key is
 // public by design; authorization is enforced inside the function/RLS.
 export async function callEdgeFunction<T>(name: string, body: unknown): Promise<T> {
@@ -40,14 +54,18 @@ export async function callEdgeFunction<T>(name: string, body: unknown): Promise<
     },
     body: JSON.stringify(body),
   });
-  let data: { error?: string } | null = null;
+  let data: { error?: string; code?: string } | null = null;
   try {
-    data = (await res.json()) as { error?: string } | null;
+    data = (await res.json()) as { error?: string; code?: string } | null;
   } catch {
     data = null;
   }
   if (!res.ok) {
-    throw new Error(data?.error ?? `Request failed (${res.status}). Please try again.`);
+    throw new EdgeFunctionError(
+      data?.error ?? `Request failed (${res.status}). Please try again.`,
+      res.status,
+      data,
+    );
   }
   return data as T;
 }

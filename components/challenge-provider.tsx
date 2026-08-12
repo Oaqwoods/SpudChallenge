@@ -2,8 +2,10 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -12,11 +14,13 @@ import { fetchChallengeData } from "@/lib/fetch-challenge";
 
 interface ChallengeContextValue extends ChallengeData {
   loading: boolean;
+  refresh: () => void;
 }
 
 const ChallengeContext = createContext<ChallengeContextValue>({
   ...EMPTY_DATA,
   loading: true,
+  refresh: () => {},
 });
 
 const REFETCH_AFTER_MS = 30_000;
@@ -24,20 +28,20 @@ const REFETCH_AFTER_MS = 30_000;
 export function ChallengeProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<ChallengeData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
+  const activeRef = useRef(true);
+  const lastFetchRef = useRef(0);
+
+  const load = useCallback(async () => {
+    lastFetchRef.current = Date.now();
+    const result = await fetchChallengeData();
+    if (activeRef.current) {
+      setData(result);
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let active = true;
-    let lastFetch = 0;
-
-    const load = async () => {
-      lastFetch = Date.now();
-      const result = await fetchChallengeData();
-      if (active) {
-        setData(result);
-        setLoading(false);
-      }
-    };
-
+    activeRef.current = true;
     load();
 
     // Admin changes to challenge timing/settings propagate without a reload:
@@ -45,7 +49,7 @@ export function ChallengeProvider({ children }: { children: ReactNode }) {
     const onVisibilityChange = () => {
       if (
         document.visibilityState === "visible" &&
-        Date.now() - lastFetch > REFETCH_AFTER_MS
+        Date.now() - lastFetchRef.current > REFETCH_AFTER_MS
       ) {
         load();
       }
@@ -53,13 +57,13 @@ export function ChallengeProvider({ children }: { children: ReactNode }) {
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
-      active = false;
+      activeRef.current = false;
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, []);
+  }, [load]);
 
   return (
-    <ChallengeContext.Provider value={{ ...data, loading }}>
+    <ChallengeContext.Provider value={{ ...data, loading, refresh: load }}>
       {children}
     </ChallengeContext.Provider>
   );

@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useChallenge } from "@/components/challenge-provider";
 import { callEdgeFunction } from "@/lib/supabase";
+import { readUtm } from "@/lib/utm";
 import { Panel, SectionHeading } from "@/components/ui";
 
 interface SignupResponse {
@@ -11,24 +12,6 @@ interface SignupResponse {
   email_updates_opt_in: boolean;
   trade_interest: boolean;
   email_sent: boolean;
-}
-
-interface UtmAttribution {
-  utm_source?: string;
-  utm_medium?: string;
-  utm_campaign?: string;
-  landing_variant?: string;
-}
-
-function readUtm(): UtmAttribution {
-  if (typeof window === "undefined") return {};
-  const params = new URLSearchParams(window.location.search);
-  const out: UtmAttribution = {};
-  for (const key of ["utm_source", "utm_medium", "utm_campaign", "landing_variant"] as const) {
-    const value = params.get(key);
-    if (value) out[key] = value.slice(0, 200);
-  }
-  return out;
 }
 
 const inputClass =

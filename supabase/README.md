@@ -56,6 +56,8 @@ view). See build spec §38.
 | --- | --- |
 | `follow-signup` | Public email-preference capture: validation, honeypot, rate limiting, upsert with resubscribe semantics, guarded Resend confirmation |
 | `email-preferences` | Signed-token unsubscribe (`action: "unsubscribe"`); unsubscribing auto-removes the follower from the public wall via the view filter |
+| `offer-upload` | Issues signed upload URLs for private `offer-uploads` photos (image allowlist, size cap, rate limit) plus an HMAC submit token binding the path to the later submission |
+| `submit-offer` | Public trade-offer submission: full validation, authoritative current-item snapshot with stale-submission rejection (spec §26), HMAC + existence verification of photos, insert into `offers`/`offer_files` |
 
 Shared helpers live in `functions/_shared/` (email validation, HMAC
 preference tokens, CORS allowlist, rate limiting, Resend client). The pure
@@ -83,7 +85,18 @@ supabase secrets set PUBLIC_SITE_URL=https://spudchallenge.online
 ```bash
 supabase functions deploy follow-signup
 supabase functions deploy email-preferences
+supabase functions deploy offer-upload
+supabase functions deploy submit-offer
 ```
+
+Note: `offer-upload`/`submit-offer` reuse `PREFERENCE_TOKEN_SECRET` (with
+domain separation) for the photo submit-token HMAC — no additional secret
+required.
+
+Browser uploads to Supabase Storage require the site origins in
+**Project Settings → API → Allowed CORS origins**:
+`https://spudchallenge.online`, `https://<your-username>.github.io`,
+`http://localhost:3000`.
 
 Functions are Deno code and are intentionally excluded from the app's
 `tsc`/ESLint scope. CORS is restricted to the production origin, localhost
