@@ -237,6 +237,8 @@ Core rules:
 11. The 21-day clock never resets.
 12. The final asset remains ours even if the $5M target is not reached.
 
+Bitcoin note for the public rules: Bitcoin (BTC) is the only permitted cryptocurrency asset. It may be received or traded away as the current asset like any other asset, but BTC can never be added to a trade as supplemental consideration alongside another asset — the challenge only trades what it currently owns (see §38).
+
 Place a disclaimer that the public rules are not a substitute for the detailed Terms of Participation.
 
 ### 4.8 FAQ
@@ -525,6 +527,8 @@ Required:
 - general location
 - confirmation that physical/legal transfer is complete or binding as appropriate
 
+When the incoming or outgoing asset is Bitcoin, the completion form must additionally capture the Bitcoin fields required by §38: BTC amount, USD fair-market value at completion, valuation timestamp, valuation source, and verification status/evidence. The recorded USD fair-market value becomes the frozen public challenge value; it is not re-marked as BTC market price moves afterward. No private keys, seed phrases, wallet credentials, or exchange credentials may be collected or stored.
+
 On publish:
 
 - update current item
@@ -685,6 +689,12 @@ Do not use this table for identity/title/ownership documents submitted by public
 - valuation_status text (estimated / verified)
 - valuation_method text
 - valuation_evidence text nullable
+- btc_amount numeric nullable
+- btc_usd_value numeric nullable
+- btc_valued_at timestamptz nullable
+- btc_valuation_source text nullable
+- btc_wallet_address text nullable (private; never exposed in public views, emails, or share metadata)
+- btc_transaction_id text nullable (private; never exposed in public views, emails, or share metadata)
 - public_story text nullable
 - public_participant_name text nullable
 - publicity_release_confirmed boolean default false
@@ -694,6 +704,8 @@ Do not use this table for identity/title/ownership documents submitted by public
 - published_at timestamptz nullable
 - updated_at timestamptz
 - created_at timestamptz
+
+The `btc_*` columns apply only when the incoming or outgoing asset of a trade is Bitcoin (see §38). A trade is a Bitcoin trade when `btc_amount` is present. `btc_wallet_address` and `btc_transaction_id` are private verification fields and must be excluded from every public view/query per §24.
 
 ### 8.5 trade_media
 
@@ -778,6 +790,12 @@ Never expose:
 - Resend API key
 - private storage buckets
 - admin credentials
+
+Never store (in the application, database, environment variables, or uploads):
+- Bitcoin private keys
+- seed phrases
+- wallet credentials
+- exchange credentials
 
 ## 10. Visual Direction
 
@@ -1032,8 +1050,9 @@ Anything beyond this should be deferred unless it fixes a security, reliability,
 
 Do NOT build:
 
-- payment processing
-- cryptocurrency
+- payment processing (including cryptocurrency payment processing)
+- cryptocurrency other than Bitcoin (BTC is permitted as a challenge asset per §38; stablecoins, tokens, NFTs, and crypto derivatives remain excluded)
+- wallet custody, key management, or exchange-credential integrations
 - bidding
 - public user profiles
 - public offer browsing
@@ -1189,8 +1208,9 @@ For every completed trade, preserve:
 - valuation notes/evidence
 - evidence links/descriptions
 - optional private appraisal/verification document added later by admin
+- for Bitcoin trades: the additional BTC recordkeeping fields required by §38 (BTC amount, USD fair-market value at completion, valuation timestamp, valuation source, verification status/evidence), which are also the tax/accounting records establishing basis and fair-market value
 
-The public scoreboard always uses the final admin-recorded challenge value, never claimed_value.
+The public scoreboard always uses the final admin-recorded challenge value, never claimed_value. For Bitcoin trades this is the frozen USD fair-market value recorded at completion.
 
 Do not publicly label a value "verified" unless verification actually occurred.
 
@@ -1322,3 +1342,46 @@ Only after attorney/professional review, the operator may use a special public m
 This should not automatically replace the current asset or claim unconditional success until the legal criteria in the attorney-reviewed challenge rules are satisfied.
 
 Do not build this special flow unless it becomes necessary. It is an operational/legal exception, not part of ordinary V1 trade processing.
+
+## 38. Bitcoin Exception (BTC)
+
+Bitcoin is the only cryptocurrency permitted as a challenge asset. This section is the sole exception to the cryptocurrency exclusion in §21.
+
+Permitted:
+
+- BTC may be received as the incoming asset of a completed trade and become the current asset.
+- If BTC becomes the current asset, it may be traded for the next asset in the chain like any other asset.
+- BTC follows the same admin offer-review, completion, and publishing workflow as any other asset. Nothing about a BTC trade is automated.
+
+Excluded (remain V1 non-goals):
+
+- all other cryptocurrencies, stablecoins, tokens, NFTs, and crypto derivatives
+- BTC (or any crypto) used as supplemental consideration added to a trade for another asset; the challenge only trades the current asset, consistent with "No adding cash to a trade"
+- wallet custody, key management, and cryptocurrency payment processing
+
+Bitcoin valuation recordkeeping:
+
+For every completed trade where BTC is incoming or outgoing, record in the trades table:
+
+- BTC amount (`btc_amount`)
+- USD fair-market value at completion (`btc_usd_value`)
+- valuation timestamp (`btc_valued_at`)
+- valuation source (`btc_valuation_source`)
+- verification status/evidence (existing `valuation_status`, `valuation_method`, `valuation_evidence` columns)
+
+Value freeze:
+
+- When a BTC trade is completed and published, the public challenge value is frozen at the USD fair-market value recorded at completion.
+- The scoreboard must never be re-marked automatically as the BTC market price moves afterward.
+- Correcting a recorded BTC value is a historical value change and requires the explicit confirmation required by §27.
+
+Security and privacy:
+
+- Never store Bitcoin private keys, seed phrases, wallet credentials, or exchange credentials in the application, database, environment variables, or file storage. Custody and any transfers happen entirely outside the application, operated manually by the owner.
+- Do not build wallet custody or cryptocurrency payment-processing functionality.
+- Wallet addresses (`btc_wallet_address`) and transaction IDs (`btc_transaction_id`) are not automatically public. They may be retained privately in the admin-only trades columns when needed for verification, and must never appear in public trade views, share metadata, emails, or non-admin exports (see §24 and §32).
+
+Tax/accounting recordkeeping:
+
+- Preserve the records needed to establish basis and fair-market value for every BTC trade: BTC amount, USD fair-market value at completion, valuation timestamp, valuation source, and verification evidence.
+- Admin CSV exports (§32) include these fields for admin use only.

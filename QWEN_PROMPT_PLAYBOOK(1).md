@@ -43,6 +43,7 @@ Public brand:
 Critical scope rules:
 
 - No payment gateway.
+- Bitcoin (BTC) is permitted as a challenge asset per the build spec's Bitcoin exception; all other crypto (stablecoins, tokens, NFTs, derivatives) remains excluded, BTC can never be added as supplemental consideration to another asset, and no wallet custody, key/seed storage, wallet/exchange credentials, or crypto payment processing may be built.
 - No marketplace.
 - No public user accounts.
 - No public offer browsing.
@@ -169,6 +170,7 @@ Requirements:
 - Add indexes for common filtering/sorting.
 - Use appropriate constraints.
 - Include timestamps.
+- Include the nullable Bitcoin columns on trades required by the build spec's Bitcoin exception: btc_amount, btc_usd_value, btc_valued_at, btc_valuation_source, and the private verification fields btc_wallet_address and btc_transaction_id, which must never appear in public trade views, share metadata, or emails.
 
 Create private storage for offer uploads and public storage or controlled access for published trade media.
 
@@ -217,7 +219,7 @@ Design direction:
 - nostalgic
 - slightly mysterious
 - not corporate SaaS
-- not crypto
+- not crypto aesthetics (visual style only; BTC is a permitted challenge asset)
 - minimal animation
 - excellent mobile hierarchy
 - use a pixel/arcade display-font look for headings and scoreboard UI based on the provided font reference
@@ -572,6 +574,9 @@ Required inputs:
 - public images
 - private completion notes (admin only; never published)
 - confirmation checkbox that the trade/transfer has actually been completed or otherwise qualifies under challenge rules
+- if the incoming or outgoing asset is Bitcoin (per the build spec's Bitcoin exception): BTC amount, USD fair-market value at completion, valuation timestamp, valuation source, and verification status/evidence; optionally private wallet address/transaction ID for verification (never public)
+
+For Bitcoin trades, the recorded USD fair-market value is the frozen public challenge value: do not re-mark the scoreboard as BTC market price moves afterward, and never collect or store private keys, seed phrases, wallet credentials, or exchange credentials.
 
 The completion UI must clearly separate public comment from private notes so exact meetup details or internal logistics can never be accidentally published.
 
@@ -1125,6 +1130,7 @@ Add valuation recordkeeping:
 - method
 - evidence notes/links
 - optional admin-added private verification document later
+- for Bitcoin trades: BTC amount, USD fair-market value at completion, valuation timestamp, valuation source, verification status/evidence, and private-only wallet address/transaction ID when needed (these also serve as the basis/fair-market tax records)
 
 Public score must use final challenge value.
 
@@ -1253,6 +1259,8 @@ Without adding new product features, verify these failure cases:
 12. Challenge expires while an ordinary selected trade has not completed.
 13. Challenge is paused for submissions but countdown continues.
 14. Identifiable trader media is about to publish without recorded publicity consent.
+15. A Bitcoin trade is completed and published; the scoreboard must stay frozen at the recorded USD fair-market value even as the BTC market price moves afterward.
+16. Bitcoin trade recordkeeping contains no private keys, seed phrases, wallet credentials, or exchange credentials, and any stored wallet address/transaction ID never appears publicly.
 
 Fix any launch-blocking behavior found.
 
