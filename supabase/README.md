@@ -34,14 +34,35 @@ timestamp order, one at a time.
 - There are no public INSERT policies: offers and email preferences are
   written by Edge Functions with the service role.
 
-## Admin bootstrap
+## Admin bootstrap (playbook PROMPT 8)
 
-`app_admins` is intentionally empty. After the admin auth user exists
-(playbook PROMPT 8), register it once with the service role / SQL editor:
+The admin area lives at `/admin/` and signs in at `/admin/login/` using
+Supabase Auth (email + password). `app_admins` is intentionally empty; the
+admin user is provisioned by hand, once:
 
-```sql
-insert into public.app_admins (user_id) values ('<admin auth user uuid>');
-```
+1. **Create the auth user** — Supabase dashboard → *Authentication → Users →
+   Add user*. Use the operator's email and a strong password, and confirm the
+   user immediately. Copy the user's UUID.
+2. **Register the admin** — SQL editor (or service role):
+
+   ```sql
+   insert into public.app_admins (user_id) values ('<admin auth user uuid>');
+   ```
+
+3. **Close public signups** — *Authentication → Sign In / Up → Sign ups*:
+   turn **off**. V1 has exactly one admin; there is no public registration.
+
+Security notes:
+
+- Passwords live only in Supabase Auth — none are hardcoded in this repo.
+- The browser bundle uses the anon key only; `SUPABASE_SERVICE_ROLE_KEY`
+  exists solely as an Edge Function secret (auto-injected by Supabase).
+- Route protection is a client gate, but authorization is server-side: the
+  session JWT is validated by PostgREST during the `app_admins` probe and
+  every admin query is restricted by RLS `is_admin()` policies. A signed-in
+  non-admin sees nothing and can read nothing.
+- Logout revokes the refresh token server-side (global scope) and clears the
+  local session.
 
 ## Bitcoin exception columns
 
