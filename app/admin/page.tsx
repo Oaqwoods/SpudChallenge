@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { AdminHome } from "@/components/admin-home";
+import { AdminDashboard } from "@/components/admin-dashboard";
 
 export const metadata: Metadata = {
   title: "Admin Dashboard",
 };
 
 export default function AdminPage() {
-  return <AdminHome />;
+  return <AdminDashboard />;
 }
