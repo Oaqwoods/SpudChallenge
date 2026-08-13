@@ -10,6 +10,7 @@ exception).
 | `20260812000002_rls_and_views.sql` | `is_admin()`, RLS + admin policies, public-safe views |
 | `20260812000003_storage.sql` | `offer-uploads` (private) and `trade-media` (public) buckets + storage policies |
 | `20260812000004_seed.sql` | Single `challenge_settings` row (prelaunch, $1 start, $5M target) |
+| `20260813000005_offer_admin_fields.sql` | Private admin review columns on `offers` (authenticity notes, risk flags, contact notes; playbook PROMPT 10 / spec §6.3) |
 
 ## Applying the migrations
 
@@ -20,7 +21,7 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-**Option B — Dashboard SQL Editor:** paste and run the four files in
+**Option B — Dashboard SQL Editor:** paste and run the five files in
 timestamp order, one at a time.
 
 ## Access model (RLS)

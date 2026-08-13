@@ -1,14 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  DETAIL_ACTIONS,
   LIST_ACTIONS,
   OFFER_STATUSES,
   OFFER_STATUS_LABELS,
   availableActions,
+  availableDetailActions,
+  canSetDetailStatus,
   canSetStatus,
   countByStatus,
   filterOffers,
   isOfferStatus,
+  offerIdFromQuery,
   sortOffers,
   toAdminOffer,
   type AdminOfferRow,
@@ -37,6 +41,13 @@ function makeOffer(overrides: Partial<AdminOfferRow> = {}): AdminOfferRow {
     why_good_trade: "Because.",
     status: "new",
     internal_notes: null,
+    verification_method: null,
+    authenticity_notes: null,
+    risk_flags: null,
+    contact_notes: null,
+    meetup_scheduled_at: null,
+    meetup_general_location: null,
+    did_not_complete_reason: null,
     created_at: "2026-08-12T12:00:00.000Z",
     ...overrides,
   };
@@ -186,4 +197,41 @@ test("toAdminOffer coerces PostgREST numerics and rejects bad rows", () => {
   // Unknown status or missing id are rejected rather than guessed.
   assert.equal(toAdminOffer({ id: "o-10", status: "accepted" }), null);
   assert.equal(toAdminOffer({ status: "new" }), null);
+});
+
+const VALID_UUID = "0b5f2f1e-2f3b-4d3a-9f1f-0d0e6b4b1a11";
+
+test("offerIdFromQuery accepts only a canonical uuid in ?id=", () => {
+  assert.equal(offerIdFromQuery(`?id=${VALID_UUID}`), VALID_UUID);
+  assert.equal(offerIdFromQuery(`?id=${VALID_UUID.toUpperCase()}`), VALID_UUID.toUpperCase());
+  assert.equal(offerIdFromQuery(`?other=1&id=${VALID_UUID}`), VALID_UUID);
+  assert.equal(offerIdFromQuery("?id=not-a-uuid"), null);
+  assert.equal(offerIdFromQuery("?id="), null);
+  assert.equal(offerIdFromQuery(""), null);
+  assert.equal(offerIdFromQuery(`?id=${VALID_UUID}extra`), null);
+});
+
+test("canSetDetailStatus allows the full workflow but not self or completed", () => {
+  for (const action of DETAIL_ACTIONS) {
+    assert.ok(canSetDetailStatus("new", action.status), `new -> ${action.status}`);
+  }
+  assert.ok(!canSetDetailStatus("new", "new"));
+  assert.ok(!canSetDetailStatus("completed", "reviewing"));
+  assert.ok(!canSetDetailStatus("completed", "declined"));
+  // completed is reachable only through the trade workflow, never here.
+  assert.ok(!DETAIL_ACTIONS.some((a) => a.status === "completed"));
+});
+
+test("availableDetailActions excludes the current state and locks completed", () => {
+  assert.deepEqual(availableDetailActions("completed"), []);
+  const fromShortlisted = availableDetailActions("shortlisted").map((a) => a.status);
+  assert.ok(!fromShortlisted.includes("shortlisted"));
+  assert.ok(fromShortlisted.includes("meetup_scheduled"));
+  assert.ok(fromShortlisted.includes("did_not_complete"));
+});
+
+test("detail actions never use Accept-style final wording", () => {
+  for (const action of [...DETAIL_ACTIONS, ...LIST_ACTIONS]) {
+    assert.ok(!/accept/i.test(action.label), `forbidden label: ${action.label}`);
+  }
 });

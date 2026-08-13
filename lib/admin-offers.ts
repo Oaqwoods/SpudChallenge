@@ -43,13 +43,24 @@ export const OFFER_STATUS_LABELS: Record<OfferStatus, string> = {
 };
 
 // Quick status changes available from the dashboard list (playbook prompt 9).
-// The full action set (meetup, did-not-complete, invalid) lands with the
-// offer detail page (prompt 10).
 export const LIST_ACTIONS: ReadonlyArray<{ status: OfferStatus; label: string }> = [
   { status: "reviewing", label: "Review" },
   { status: "shortlisted", label: "Shortlist" },
   { status: "selected", label: "Select" },
   { status: "declined", label: "Decline" },
+];
+
+// Full workflow actions on the offer detail page (playbook prompt 10).
+// Deliberately no "Accept" — nothing here ends the workflow, and selecting
+// or scheduling never changes the public challenge.
+export const DETAIL_ACTIONS: ReadonlyArray<{ status: OfferStatus; label: string }> = [
+  { status: "reviewing", label: "Reopen Review" },
+  { status: "shortlisted", label: "Shortlist" },
+  { status: "selected", label: "Select for Verification" },
+  { status: "meetup_scheduled", label: "Schedule Meetup" },
+  { status: "declined", label: "Decline" },
+  { status: "did_not_complete", label: "Did Not Complete" },
+  { status: "invalid", label: "Invalid / Spam" },
 ];
 
 export function isOfferStatus(value: unknown): value is OfferStatus {
@@ -78,7 +89,25 @@ export interface AdminOfferRow {
   why_good_trade: string;
   status: OfferStatus;
   internal_notes: string | null;
+  verification_method: string | null;
+  authenticity_notes: string | null;
+  risk_flags: string | null;
+  contact_notes: string | null;
+  meetup_scheduled_at: string | null;
+  meetup_general_location: string | null;
+  did_not_complete_reason: string | null;
   created_at: string;
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Extracts and validates ?id= from the detail-page URL. Static hosting has
+// no dynamic routes, so the offer id travels as a query parameter.
+export function offerIdFromQuery(search: string): string | null {
+  const params = new URLSearchParams(search);
+  const id = params.get("id");
+  return id !== null && UUID_RE.test(id) ? id : null;
 }
 
 // Coerce a raw PostgREST row. `numeric` columns arrive as strings and
@@ -107,6 +136,13 @@ export function toAdminOffer(row: Record<string, unknown>): AdminOfferRow | null
     why_good_trade: toStr(row.why_good_trade) ?? "",
     status: row.status,
     internal_notes: toStr(row.internal_notes),
+    verification_method: toStr(row.verification_method),
+    authenticity_notes: toStr(row.authenticity_notes),
+    risk_flags: toStr(row.risk_flags),
+    contact_notes: toStr(row.contact_notes),
+    meetup_scheduled_at: toStr(row.meetup_scheduled_at),
+    meetup_general_location: toStr(row.meetup_general_location),
+    did_not_complete_reason: toStr(row.did_not_complete_reason),
     created_at: toStr(row.created_at) ?? "",
   };
 }
@@ -171,4 +207,17 @@ export function canSetStatus(from: OfferStatus, to: OfferStatus): boolean {
 
 export function availableActions(from: OfferStatus): ReadonlyArray<{ status: OfferStatus; label: string }> {
   return LIST_ACTIONS.filter((action) => canSetStatus(from, action.status));
+}
+
+// Detail-page transitions: the full action set minus the current state.
+// Completed offers stay locked — their outcome moves through the trade
+// workflow (playbook prompt 11). Nothing here touches the public challenge.
+export function canSetDetailStatus(from: OfferStatus, to: OfferStatus): boolean {
+  if (from === to) return false;
+  if (from === "completed") return false;
+  return DETAIL_ACTIONS.some((action) => action.status === to);
+}
+
+export function availableDetailActions(from: OfferStatus): ReadonlyArray<{ status: OfferStatus; label: string }> {
+  return DETAIL_ACTIONS.filter((action) => canSetDetailStatus(from, action.status));
 }

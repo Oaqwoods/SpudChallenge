@@ -6,6 +6,7 @@
 // enforced by RLS is_admin() policies. No automatic scoring — humans decide.
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useNow } from "@/hooks/use-now";
 import {
   DEFAULT_SETTINGS,
@@ -32,28 +33,20 @@ import {
 } from "@/lib/admin-offers";
 import { Panel } from "@/components/ui";
 
+// List-only columns (name/email are included for search). Full rows are
+// fetched on the offer detail page.
 const OFFER_COLUMNS = [
   "id",
   "name",
   "email",
-  "phone",
-  "offered_against_trade_number",
-  "offered_against_item_name",
   "item_name",
-  "item_description",
   "claimed_value",
   "verified_value",
   "condition",
   "city",
   "state",
-  "zip",
   "in_person",
-  "travel_distance",
-  "serial_or_model",
-  "comp_url",
-  "why_good_trade",
   "status",
-  "internal_notes",
   "created_at",
 ].join(", ");
 
@@ -172,93 +165,11 @@ async function fetchDashboardState(): Promise<LoadState> {
   };
 }
 
-function OfferDetail({ offer }: { offer: AdminOfferRow }) {
-  return (
-    <div className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-      <div>
-        <p className={labelClass}>Contact</p>
-        <p className="mt-1 text-foreground">{offer.name}</p>
-        <p className="text-faded">{offer.email}</p>
-        {offer.phone ? <p className="text-faded">{offer.phone}</p> : null}
-      </div>
-      <div>
-        <p className={labelClass}>Offered against</p>
-        <p className="mt-1 text-foreground">
-          Trade #{offer.offered_against_trade_number} — {offer.offered_against_item_name}
-        </p>
-        <p className="mt-2 text-faded">Submitted {formatDateTime(offer.created_at)}</p>
-      </div>
-      <div className="sm:col-span-2">
-        <p className={labelClass}>Item description</p>
-        <p className="mt-1 whitespace-pre-wrap leading-relaxed text-foreground">
-          {offer.item_description}
-        </p>
-      </div>
-      <div className="sm:col-span-2">
-        <p className={labelClass}>Why this is a good trade</p>
-        <p className="mt-1 whitespace-pre-wrap leading-relaxed text-foreground">
-          {offer.why_good_trade}
-        </p>
-      </div>
-      <div>
-        <p className={labelClass}>Details</p>
-        <ul className="mt-1 flex flex-col gap-1 text-faded">
-          <li>Condition: <span className="text-foreground">{offer.condition}</span></li>
-          {offer.serial_or_model ? (
-            <li>Serial / model: <span className="text-foreground">{offer.serial_or_model}</span></li>
-          ) : null}
-          {offer.comp_url ? (
-            <li>
-              Comparable:{" "}
-              <a
-                href={offer.comp_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent underline"
-              >
-                {offer.comp_url}
-              </a>
-            </li>
-          ) : null}
-        </ul>
-      </div>
-      <div>
-        <p className={labelClass}>Logistics</p>
-        <ul className="mt-1 flex flex-col gap-1 text-faded">
-          <li>
-            Location:{" "}
-            <span className="text-foreground">
-              {offer.city}, {offer.state}
-              {offer.zip ? ` ${offer.zip}` : ""}
-            </span>
-          </li>
-          <li>In person: <span className="text-foreground">{offer.in_person ? "Yes" : "No"}</span></li>
-          {offer.travel_distance ? (
-            <li>Travel: <span className="text-foreground">{offer.travel_distance}</span></li>
-          ) : null}
-        </ul>
-      </div>
-      {offer.internal_notes ? (
-        <div className="sm:col-span-2">
-          <p className={labelClass}>Internal notes</p>
-          <p className="mt-1 whitespace-pre-wrap leading-relaxed text-foreground">
-            {offer.internal_notes}
-          </p>
-        </div>
-      ) : null}
-      <p className="text-xs text-faded sm:col-span-2">
-        Photos and verification fields open on the offer detail page.
-      </p>
-    </div>
-  );
-}
-
 export function AdminDashboard() {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [statusFilter, setStatusFilter] = useState<OfferStatus | "all">("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<OfferSort>("newest");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const now = useNow(1000);
@@ -471,20 +382,14 @@ export function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((offer) => {
-                  const expanded = expandedId === offer.id;
-                  const busy = pendingId === offer.id;
-                  return (
-                    <FragmentRow
-                      key={offer.id}
-                      offer={offer}
-                      expanded={expanded}
-                      busy={busy}
-                      onToggle={() => setExpandedId(expanded ? null : offer.id)}
-                      onStatus={(next) => void applyStatus(offer, next)}
-                    />
-                  );
-                })}
+                {visible.map((offer) => (
+                  <OfferRow
+                    key={offer.id}
+                    offer={offer}
+                    busy={pendingId === offer.id}
+                    onStatus={(next) => void applyStatus(offer, next)}
+                  />
+                ))}
               </tbody>
             </table>
           </Panel>
@@ -499,17 +404,13 @@ export function AdminDashboard() {
   );
 }
 
-function FragmentRow({
+function OfferRow({
   offer,
-  expanded,
   busy,
-  onToggle,
   onStatus,
 }: {
   offer: AdminOfferRow;
-  expanded: boolean;
   busy: boolean;
-  onToggle: () => void;
   onStatus: (next: OfferStatus) => void;
 }) {
   const submitted = new Date(offer.created_at);
@@ -520,59 +421,45 @@ function FragmentRow({
       );
 
   return (
-    <>
-      <tr className={`border-b border-edge align-top ${expanded ? "bg-background" : ""}`}>
-        <td className="px-3 py-3">
-          <StatusBadge status={offer.status} />
-        </td>
-        <td className="px-3 py-3">
-          <p className="text-foreground">{offer.item_name}</p>
-          <p className="mt-1 text-xs text-faded">{offer.condition}</p>
-        </td>
-        <td className="px-3 py-3 font-display text-xs text-foreground">
-          {formatUsd(offer.claimed_value)}
-        </td>
-        <td className="px-3 py-3 font-display text-xs text-mint">
-          {offer.verified_value === null ? "—" : formatUsd(offer.verified_value)}
-        </td>
-        <td className="px-3 py-3 text-xs text-faded">
-          {offer.city}, {offer.state}
-        </td>
-        <td className="px-3 py-3 text-xs text-faded">{offer.in_person ? "Yes" : "—"}</td>
-        <td className="px-3 py-3 text-xs text-faded">{submittedLabel}</td>
-        <td className="px-3 py-3">
-          <div className="flex flex-wrap gap-1">
+    <tr className="border-b border-edge align-top">
+      <td className="px-3 py-3">
+        <StatusBadge status={offer.status} />
+      </td>
+      <td className="px-3 py-3">
+        <p className="text-foreground">{offer.item_name}</p>
+        <p className="mt-1 text-xs text-faded">{offer.condition}</p>
+      </td>
+      <td className="px-3 py-3 font-display text-xs text-foreground">
+        {formatUsd(offer.claimed_value)}
+      </td>
+      <td className="px-3 py-3 font-display text-xs text-mint">
+        {offer.verified_value === null ? "—" : formatUsd(offer.verified_value)}
+      </td>
+      <td className="px-3 py-3 text-xs text-faded">
+        {offer.city}, {offer.state}
+      </td>
+      <td className="px-3 py-3 text-xs text-faded">{offer.in_person ? "Yes" : "—"}</td>
+      <td className="px-3 py-3 text-xs text-faded">{submittedLabel}</td>
+      <td className="px-3 py-3">
+        <div className="flex flex-wrap gap-1">
+          <Link href={`/admin/offers/?id=${offer.id}`} className={actionButtonClass}>
+            Open
+          </Link>
+          {availableActions(offer.status).map((action) => (
             <button
+              key={action.status}
               type="button"
-              onClick={onToggle}
-              aria-expanded={expanded}
-              className={`${actionButtonClass} ${expanded ? "border-accent text-accent" : ""}`}
+              disabled={busy}
+              onClick={() => onStatus(action.status)}
+              className={`${actionButtonClass} ${
+                action.status === "declined" ? "hover:border-alert hover:text-alert" : ""
+              }`}
             >
-              {expanded ? "Close" : "Open"}
+              {action.label}
             </button>
-            {availableActions(offer.status).map((action) => (
-              <button
-                key={action.status}
-                type="button"
-                disabled={busy}
-                onClick={() => onStatus(action.status)}
-                className={`${actionButtonClass} ${
-                  action.status === "declined" ? "hover:border-alert hover:text-alert" : ""
-                }`}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
-        </td>
-      </tr>
-      {expanded ? (
-        <tr className="border-b border-edge">
-          <td colSpan={8} className="bg-background px-4 py-4">
-            <OfferDetail offer={offer} />
-          </td>
-        </tr>
-      ) : null}
-    </>
+          ))}
+        </div>
+      </td>
+    </tr>
   );
 }
