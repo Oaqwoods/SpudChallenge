@@ -322,6 +322,14 @@ export function AdminOfferDetail() {
               the trade-completion workflow.
             </p>
           ) : null}
+          {offer.status === "selected" || offer.status === "meetup_scheduled" ? (
+            <Link
+              href={`/admin/trades/new/?offer=${offer.id}`}
+              className="mt-4 inline-block border-[3px] border-mint bg-mint px-4 py-3 font-display text-[9px] uppercase tracking-wider text-black transition-colors hover:bg-transparent hover:text-mint sm:text-[10px]"
+            >
+              Complete Trade →
+            </Link>
+          ) : null}
         </Panel>
       </section>
 

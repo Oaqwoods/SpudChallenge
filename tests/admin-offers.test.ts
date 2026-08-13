@@ -15,6 +15,7 @@ import {
   offerIdFromQuery,
   sortOffers,
   toAdminOffer,
+  uuidFromQuery,
   type AdminOfferRow,
 } from "../lib/admin-offers.ts";
 
@@ -209,6 +210,11 @@ test("offerIdFromQuery accepts only a canonical uuid in ?id=", () => {
   assert.equal(offerIdFromQuery("?id="), null);
   assert.equal(offerIdFromQuery(""), null);
   assert.equal(offerIdFromQuery(`?id=${VALID_UUID}extra`), null);
+});
+
+test("uuidFromQuery reads the requested key only", () => {
+  assert.equal(uuidFromQuery(`?offer=${VALID_UUID}`, "offer"), VALID_UUID);
+  assert.equal(uuidFromQuery(`?id=${VALID_UUID}`, "offer"), null);
 });
 
 test("canSetDetailStatus allows the full workflow but not self or completed", () => {

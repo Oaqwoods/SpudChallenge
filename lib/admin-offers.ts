@@ -102,12 +102,16 @@ export interface AdminOfferRow {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Extracts and validates ?id= from the detail-page URL. Static hosting has
-// no dynamic routes, so the offer id travels as a query parameter.
-export function offerIdFromQuery(search: string): string | null {
+// Extracts and validates a uuid query parameter. Static hosting has no
+// dynamic routes, so ids travel as query parameters.
+export function uuidFromQuery(search: string, key: string): string | null {
   const params = new URLSearchParams(search);
-  const id = params.get("id");
+  const id = params.get(key);
   return id !== null && UUID_RE.test(id) ? id : null;
+}
+
+export function offerIdFromQuery(search: string): string | null {
+  return uuidFromQuery(search, "id");
 }
 
 // Coerce a raw PostgREST row. `numeric` columns arrive as strings and
