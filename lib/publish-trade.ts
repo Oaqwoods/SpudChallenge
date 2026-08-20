@@ -1,6 +1,7 @@
 // Pure trade-completion logic (playbook prompt 11): client-side validation
-// mirroring the publish_trade RPC, and the draft broadcast builder. Leaf
-// module with no local imports — unit tested directly under Node.
+// mirroring the publish_trade RPC. Leaf module with no local imports — unit
+// tested directly under Node. The trade-update email draft is built by
+// lib/broadcast.ts (prompt 12).
 //
 // The authoritative checks live in the RPC; these exist to give immediate,
 // friendly feedback before a round trip.
@@ -90,46 +91,3 @@ export function validateCompletion(draft: CompletionDraft): string | null {
   return null;
 }
 
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-export function formatUsdForEmail(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-export interface DraftEmailInput {
-  tradeNumber: number;
-  outgoingItem: string;
-  outgoingValue: number;
-  incomingItem: string;
-  incomingValue: number;
-  story: string | null;
-  siteUrl: string;
-}
-
-// Draft broadcast stored by the publish RPC. Prompt 12 adds editing, preview
-// and sending — drafts are never auto-sent.
-export function buildDraftEmail(input: DraftEmailInput): {
-  subject: string;
-  body_html: string;
-} {
-  const subject = `TRADE #${input.tradeNumber}: ${formatUsdForEmail(input.outgoingValue)} → ${formatUsdForEmail(input.incomingValue)}`;
-  const story = input.story?.trim() ? `<p>${escapeHtml(input.story.trim())}</p>` : "";
-  const body_html = [
-    `<p>Trade #${input.tradeNumber} is complete.</p>`,
-    `<p>We traded <strong>${escapeHtml(input.outgoingItem)}</strong> (${formatUsdForEmail(input.outgoingValue)}) for <strong>${escapeHtml(input.incomingItem)}</strong> (${formatUsdForEmail(input.incomingValue)}).</p>`,
-    story,
-    `<p><a href="${escapeHtml(input.siteUrl)}">Follow the challenge</a></p>`,
-  ].join("\n");
-  return { subject, body_html };
-}

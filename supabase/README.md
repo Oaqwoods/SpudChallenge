@@ -12,6 +12,7 @@ exception).
 | `20260812000004_seed.sql` | Single `challenge_settings` row (prelaunch, $1 start, $5M target) |
 | `20260813000005_offer_admin_fields.sql` | Private admin review columns on `offers` (authenticity notes, risk flags, contact notes; playbook PROMPT 10 / spec §6.3) |
 | `20260813000006_publish_trade.sql` | `trades.private_completion_notes` + transactional `publish_trade(...)` RPC (all-or-nothing publish, Bitcoin exception validation, draft broadcast; playbook PROMPT 11 / spec §6.5, §38) |
+| `20260820000007_broadcast_recipients.sql` | `email_broadcast_recipients` per-recipient send log for broadcasts (status/errors, safe retry, audit; playbook PROMPT 12 / spec §7.3) |
 
 ## Applying the migrations
 
@@ -81,10 +82,12 @@ view). See build spec §38.
 | `email-preferences` | Signed-token unsubscribe (`action: "unsubscribe"`); unsubscribing auto-removes the follower from the public wall via the view filter |
 | `offer-upload` | Issues signed upload URLs for private `offer-uploads` photos (image allowlist, size cap, rate limit) plus an HMAC submit token binding the path to the later submission |
 | `submit-offer` | Public trade-offer submission: full validation, authoritative current-item snapshot with stale-submission rejection (spec §26), HMAC + existence verification of photos, insert into `offers`/`offer_files` |
+| `send-broadcast` | Admin-only (session JWT + `app_admins`): sends a reviewed draft broadcast with an explicit confirm flag, Resend batches of ≤100, per-recipient logging to `email_broadcast_recipients`, unsubscribe exclusion, and no re-send of already-delivered addresses (spec §7) |
 
 Shared helpers live in `functions/_shared/` (email validation, HMAC
-preference tokens, CORS allowlist, rate limiting, Resend client). The pure
-helpers are unit-tested from `tests/preferences.test.ts`.
+preference tokens, CORS allowlist, rate limiting, Resend client, broadcast
+audience/batching). The pure helpers are unit-tested from
+`tests/preferences.test.ts` and `tests/broadcast.test.ts`.
 
 ### Required secrets
 
@@ -110,6 +113,7 @@ supabase functions deploy follow-signup
 supabase functions deploy email-preferences
 supabase functions deploy offer-upload
 supabase functions deploy submit-offer
+supabase functions deploy send-broadcast
 ```
 
 Note: `offer-upload`/`submit-offer` reuse `PREFERENCE_TOKEN_SECRET` (with

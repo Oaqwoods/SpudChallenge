@@ -69,3 +69,42 @@ export async function callEdgeFunction<T>(name: string, body: unknown): Promise<
   }
   return data as T;
 }
+
+// POST to an admin-only Edge Function (e.g. send-broadcast) using the
+// signed-in admin's session access token. The function verifies the JWT and
+// app_admins membership; the anon key is never sufficient here.
+export async function callAdminEdgeFunction<T>(name: string, body: unknown): Promise<T> {
+  const endpoint = edgeFunctionUrl(name);
+  const supabase = getSupabase();
+  if (!endpoint || !supabase) {
+    throw new Error("Admin is not configured yet (missing Supabase configuration).");
+  }
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("Your admin session has expired. Please sign in again.");
+  }
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  let data: { error?: string; code?: string } | null = null;
+  try {
+    data = (await res.json()) as { error?: string; code?: string } | null;
+  } catch {
+    data = null;
+  }
+  if (!res.ok) {
+    throw new EdgeFunctionError(
+      data?.error ?? `Request failed (${res.status}). Please try again.`,
+      res.status,
+      data,
+    );
+  }
+  return data as T;
+}

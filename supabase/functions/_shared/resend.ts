@@ -34,6 +34,49 @@ export async function sendEmail(args: SendArgs): Promise<boolean> {
   return res.ok;
 }
 
+export interface BatchMessage {
+  to: string;
+  subject: string;
+  html: string;
+}
+
+export type BatchResult =
+  | { ok: true; ids: string[] }
+  | { ok: false; error: string };
+
+// Resend batch endpoint (max 100 messages per request, enforced by the
+// caller via MAX_BATCH_SIZE). One entry comes back per message, in order.
+export async function sendBatch(messages: BatchMessage[]): Promise<BatchResult> {
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  const from = Deno.env.get("RESEND_FROM");
+  if (!apiKey || !from) return { ok: false, error: "Email sending is not configured." };
+
+  const res = await fetch("https://api.resend.com/emails/batch", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(messages.map((m) => ({
+      from,
+      to: [m.to],
+      subject: m.subject,
+      html: m.html,
+    }))),
+  });
+  const payload = (await res.json().catch(() => null)) as
+    | { data?: { id?: string }[]; message?: string; name?: string }
+    | null;
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: payload?.message ?? payload?.name ?? `Resend batch failed (${res.status}).`,
+    };
+  }
+  const ids = (payload?.data ?? []).map((entry) => entry.id ?? "");
+  return { ok: true, ids };
+}
+
 export function siteUrl(): string {
   return Deno.env.get("PUBLIC_SITE_URL") ?? "https://spudchallenge.online";
 }

@@ -2,9 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   MAX_PUBLIC_IMAGES,
-  buildDraftEmail,
-  escapeHtml,
-  formatUsdForEmail,
   validateCompletion,
   type CompletionDraft,
 } from "../lib/publish-trade.ts";
@@ -109,46 +106,3 @@ test("validateCompletion requires the real-transfer confirmation", () => {
   assert.match(validateCompletion(validDraft({ confirmed: false })) ?? "", /confirm/i);
 });
 
-test("escapeHtml neutralizes markup", () => {
-  assert.equal(
-    escapeHtml(`<img src=x onerror="alert('hi')">`),
-    "&lt;img src=x onerror=&quot;alert(&#39;hi&#39;)&quot;&gt;",
-  );
-  assert.equal(escapeHtml("a & b"), "a &amp; b");
-});
-
-test("formatUsdForEmail renders whole-dollar amounts", () => {
-  assert.equal(formatUsdForEmail(850), "$850");
-  assert.equal(formatUsdForEmail(1400), "$1,400");
-});
-
-test("buildDraftEmail matches the suggested subject and escapes content", () => {
-  const draft = buildDraftEmail({
-    tradeNumber: 5,
-    outgoingItem: "Bike <script>",
-    outgoingValue: 850,
-    incomingItem: "Watch",
-    incomingValue: 1400,
-    story: "Great trade & fun",
-    siteUrl: "https://spudchallenge.online",
-  });
-  assert.equal(draft.subject, "TRADE #5: $850 → $1,400");
-  assert.ok(draft.body_html.includes("Trade #5"));
-  assert.ok(draft.body_html.includes("Bike &lt;script&gt;"));
-  assert.ok(!draft.body_html.includes("<script>"));
-  assert.ok(draft.body_html.includes("Great trade &amp; fun"));
-  assert.ok(draft.body_html.includes("https://spudchallenge.online"));
-});
-
-test("buildDraftEmail omits an empty story", () => {
-  const draft = buildDraftEmail({
-    tradeNumber: 1,
-    outgoingItem: "Dollar",
-    outgoingValue: 1,
-    incomingItem: "Paperclip",
-    incomingValue: 5,
-    story: "   ",
-    siteUrl: "https://spudchallenge.online",
-  });
-  assert.ok(!draft.body_html.includes("<p></p>"));
-});

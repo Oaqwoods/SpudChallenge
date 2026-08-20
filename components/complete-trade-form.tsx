@@ -9,15 +9,11 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { formatUsd } from "@/lib/format";
-import { getSupabase } from "@/lib/supabase";
+import { getSupabase, publicMediaUrl } from "@/lib/supabase";
 import { toSettings, type ChallengeSettings } from "@/lib/challenge";
 import { toAdminOffer, type AdminOfferRow, type OfferStatus } from "@/lib/admin-offers";
-import {
-  MAX_PUBLIC_IMAGES,
-  buildDraftEmail,
-  validateCompletion,
-  type BtcSide,
-} from "@/lib/publish-trade";
+import { buildTradeEmail, timeRemainingLabel } from "@/lib/broadcast";
+import { MAX_PUBLIC_IMAGES, validateCompletion, type BtcSide } from "@/lib/publish-trade";
 import { Panel } from "@/components/ui";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -279,13 +275,19 @@ export function CompleteTradeForm({ offerId }: { offerId: string }) {
     if (!supabase) return;
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
-    const email = buildDraftEmail({
+    const firstPhoto = photos.find((p) => p.status === "uploaded" && p.path);
+    const email = buildTradeEmail({
       tradeNumber: nextTradeNumber,
       outgoingItem: outgoingItem.trim(),
       outgoingValue: outgoingNum,
       incomingItem: incomingItem.trim(),
       incomingValue: incomingNum,
+      startingValue: settings.starting_value,
+      // After publish the current item IS the incoming item.
+      currentValue: incomingNum,
+      timeRemainingLabel: timeRemainingLabel(settings.end_at, Date.now()),
       story: publicStory.trim() || null,
+      imageUrl: firstPhoto?.path ? publicMediaUrl(firstPhoto.path) : null,
       siteUrl,
     });
 
@@ -342,7 +344,10 @@ export function CompleteTradeForm({ offerId }: { offerId: string }) {
           sending anything.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Link href="/" className="border-[3px] border-accent bg-accent px-4 py-2 font-display text-[9px] uppercase tracking-wider text-black hover:bg-transparent hover:text-accent sm:text-[10px]">
+          <Link href="/admin/emails/" className="border-[3px] border-accent bg-accent px-4 py-2 font-display text-[9px] uppercase tracking-wider text-black hover:bg-transparent hover:text-accent sm:text-[10px]">
+            Review draft email
+          </Link>
+          <Link href="/" className="border-[3px] border-edge px-4 py-2 font-display text-[9px] uppercase tracking-wider text-faded hover:border-accent hover:text-accent sm:text-[10px]">
             View public site
           </Link>
           <Link href="/admin/" className="border-[3px] border-edge px-4 py-2 font-display text-[9px] uppercase tracking-wider text-faded hover:border-accent hover:text-accent sm:text-[10px]">

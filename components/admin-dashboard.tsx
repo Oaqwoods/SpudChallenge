@@ -254,13 +254,18 @@ export function AdminDashboard() {
     <main className="mx-auto max-w-5xl px-4 py-8">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="font-display text-base text-accent sm:text-lg">DASHBOARD</h1>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="text-xs text-faded underline hover:text-accent"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <Link href="/admin/emails/" className="text-xs text-faded underline hover:text-accent">
+            Email broadcasts
+          </Link>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="text-xs text-faded underline hover:text-accent"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
