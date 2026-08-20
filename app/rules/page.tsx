@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { TrackOnMount } from "@/components/analytics-tracker";
 import { RulesList, BITCOIN_NOTE } from "@/components/rules";
 import { Panel } from "@/components/ui";
 
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 export default function RulesPage() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
+      <TrackOnMount event="rules_viewed" />
       <Link href="/" className="text-sm text-faded hover:text-accent">
         ← Back to the challenge
       </Link>

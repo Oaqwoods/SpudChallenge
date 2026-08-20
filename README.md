@@ -76,6 +76,23 @@ and HTTPS enforcement — are documented as part of the deployment-prep
 milestone (playbook PROMPT 18 / spec §1B, §34). DNS changes are always manual
 owner actions; nothing in this repository mutates DNS.
 
+## Analytics
+
+Lightweight, privacy-light, first-party telemetry — no third-party SDKs, no
+cookies, no identifiers. The client (`lib/analytics.ts`) fires events
+fire-and-forget to the `track-event` Edge Function, which stores them in
+`analytics_events` (admin-readable, service-role-writable).
+
+Tracked events: `page_view`, `follow_cta_clicked`, `follower_submitted`,
+`follower_wall_opt_in`, `potential_trader_captured`, `offer_cta_clicked`,
+`offer_started`, `offer_submitted`, `share_clicked`, `rules_viewed`,
+`trade_detail_viewed` — with pathname, UTMs and a coarse detail string
+(e.g. share method or trade number) only.
+
+Never recorded: emails, phone numbers, offer descriptions, uploaded files or
+any other sensitive form data. The event allowlist and length caps in the
+Edge Function make that structural.
+
 ## Project structure
 
 ```

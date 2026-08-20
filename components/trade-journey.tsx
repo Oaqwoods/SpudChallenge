@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { useChallenge } from "@/components/challenge-provider";
+import { track } from "@/lib/analytics";
 import { DEFAULT_SETTINGS, type PublicTrade } from "@/lib/challenge";
 import { publicMediaUrl } from "@/lib/supabase";
 import { formatDate, formatSignedUsd, formatUsd } from "@/lib/format";
@@ -11,9 +13,31 @@ function TradeCard({ trade }: { trade: PublicTrade }) {
   const { mediaByTrade } = useChallenge();
   const media = (mediaByTrade[trade.id] ?? []).slice(0, 3);
   const delta = trade.incoming_value - trade.outgoing_value;
+  const cardRef = useRef<HTMLDivElement | null>(null);
+
+  // A trade card that scrolled into view counts as viewed — once per load.
+  useEffect(() => {
+    const node = cardRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    let seen = false;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (seen) return;
+        if (entries.some((entry) => entry.isIntersecting)) {
+          seen = true;
+          track("trade_detail_viewed", `#${trade.trade_number}`);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.4 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [trade.trade_number]);
 
   return (
-    <Panel className="p-5">
+    <div ref={cardRef}>
+      <Panel className="p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-display text-xs text-accent">TRADE #{trade.trade_number}</h3>
         <p className="text-xs text-faded">{formatDate(trade.completed_at)}</p>
@@ -72,7 +96,8 @@ function TradeCard({ trade }: { trade: PublicTrade }) {
           ))}
         </div>
       ) : null}
-    </Panel>
+      </Panel>
+    </div>
   );
 }
 

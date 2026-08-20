@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useChallenge } from "@/components/challenge-provider";
 import { useNow } from "@/hooks/use-now";
+import { track } from "@/lib/analytics";
 import { DEFAULT_SETTINGS, getPhase } from "@/lib/challenge";
 import { compactDuration } from "@/lib/time";
 import {
@@ -80,6 +81,7 @@ export function SharePanel() {
 
   const copyLink = async () => {
     const target = siteBaseUrl();
+    track("share_clicked", "copy");
     try {
       await navigator.clipboard.writeText(target);
       setCopyState("copied");
@@ -103,6 +105,7 @@ export function SharePanel() {
   };
 
   const nativeShare = async () => {
+    track("share_clicked", "native");
     try {
       await navigator.share({ title, text, url });
     } catch {
@@ -119,7 +122,11 @@ export function SharePanel() {
         <button type="button" onClick={() => void copyLink()} className={shareButtonClass}>
           {copyState === "copied" ? "Copied!" : "Copy link"}
         </button>
-        <a href={emailShareUrl(url, title, text)} className={socialLinkClass}>
+        <a
+          href={emailShareUrl(url, title, text)}
+          onClick={() => track("share_clicked", "email")}
+          className={socialLinkClass}
+        >
           Email
         </a>
         {supportsNativeShare ? (
@@ -131,6 +138,7 @@ export function SharePanel() {
           href={xShareUrl(url, text)}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => track("share_clicked", "x")}
           className={socialLinkClass}
         >
           X
@@ -139,6 +147,7 @@ export function SharePanel() {
           href={facebookShareUrl(url)}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => track("share_clicked", "facebook")}
           className={socialLinkClass}
         >
           Facebook
@@ -147,6 +156,7 @@ export function SharePanel() {
           href={redditShareUrl(url, title)}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => track("share_clicked", "reddit")}
           className={socialLinkClass}
         >
           Reddit

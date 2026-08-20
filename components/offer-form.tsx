@@ -2,8 +2,10 @@
 
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
+import { TrackOnMount } from "@/components/analytics-tracker";
 import { useChallenge } from "@/components/challenge-provider";
 import { useNow } from "@/hooks/use-now";
+import { track } from "@/lib/analytics";
 import { DEFAULT_SETTINGS, getPhase } from "@/lib/challenge";
 import { callEdgeFunction, EdgeFunctionError, getSupabase } from "@/lib/supabase";
 import { readUtm } from "@/lib/utm";
@@ -274,6 +276,7 @@ export function OfferForm() {
         ...readUtm(),
       });
       setStatus("success");
+      track("offer_submitted");
     } catch (err) {
       if (
         err instanceof EdgeFunctionError &&
@@ -296,6 +299,7 @@ export function OfferForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <TrackOnMount event="offer_started" />
       {/* Honeypot — hidden from people, tempting to bots. */}
       <div className="hidden" aria-hidden="true">
         <label>

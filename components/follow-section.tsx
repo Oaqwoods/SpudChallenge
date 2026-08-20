@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useChallenge } from "@/components/challenge-provider";
+import { track } from "@/lib/analytics";
 import { callEdgeFunction } from "@/lib/supabase";
 import { readUtm } from "@/lib/utm";
 import { Panel, SectionHeading } from "@/components/ui";
@@ -90,6 +91,8 @@ function FollowForm() {
         ...readUtm(),
       });
       setStatus("success");
+      track("follower_submitted");
+      if (res.trade_interest) track("potential_trader_captured");
       if (res.email_updates_opt_in && res.trade_interest) {
         setMessage(
           "You're in — every completed trade will be emailed to you, and we'll reach out when trades open.",
@@ -183,7 +186,10 @@ function FollowForm() {
             <input
               type="checkbox"
               checked={wallOptIn}
-              onChange={(e) => setWallOptIn(e.target.checked)}
+              onChange={(e) => {
+                setWallOptIn(e.target.checked);
+                if (e.target.checked) track("follower_wall_opt_in");
+              }}
               className="mt-1 accent-accent"
             />
             Show my name on the public follower wall

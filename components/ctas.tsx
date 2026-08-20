@@ -2,6 +2,7 @@
 
 import { useChallenge } from "@/components/challenge-provider";
 import { useNow } from "@/hooks/use-now";
+import { track } from "@/lib/analytics";
 import { getPhase } from "@/lib/challenge";
 
 const baseButton =
@@ -18,7 +19,11 @@ export function OfferCta() {
 
   if (phase === "active" && !paused) {
     return (
-      <a href="/offer/" className={`${baseButton} ${primary}`}>
+      <a
+        href="/offer/"
+        onClick={() => track("offer_cta_clicked")}
+        className={`${baseButton} ${primary}`}
+      >
         I Have Something Better
       </a>
     );
@@ -51,7 +56,11 @@ export function FollowCta() {
   const emphasized = phase !== "active";
 
   return (
-    <a href="#follow" className={`${baseButton} ${emphasized ? primary : secondary}`}>
+    <a
+      href="#follow"
+      onClick={() => track("follow_cta_clicked")}
+      className={`${baseButton} ${emphasized ? primary : secondary}`}
+    >
       Follow the Challenge
     </a>
   );
