@@ -108,7 +108,7 @@ export function TradeJourney() {
   const chain = ["$1", ...trades.map((t) => t.incoming_item)];
 
   return (
-    <section id="journey" aria-labelledby="journey-heading" className="mx-auto max-w-3xl px-4 py-8">
+    <section id="journey" aria-labelledby="journey-heading" className="mx-auto max-w-3xl scroll-mt-20 px-4 py-8">
       <SectionHeading id="journey-heading">Trade Journey</SectionHeading>
       <div className="mt-4 overflow-x-auto border-[3px] border-edge bg-panel px-4 py-3">
         <p className="whitespace-nowrap font-display text-[10px] sm:text-xs">

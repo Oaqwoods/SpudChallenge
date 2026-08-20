@@ -21,7 +21,7 @@ export function CurrentItem() {
   const frozenBtcValue = lastTrade?.btc_amount != null;
 
   return (
-    <section id="current" aria-labelledby="current-heading" className="mx-auto max-w-3xl px-4 py-8">
+    <section id="current" aria-labelledby="current-heading" className="mx-auto max-w-3xl scroll-mt-20 px-4 py-8">
       <SectionHeading id="current-heading">Current Item</SectionHeading>
       <Panel className="mt-4 overflow-hidden">
         <div className="grid sm:grid-cols-[240px_1fr]">

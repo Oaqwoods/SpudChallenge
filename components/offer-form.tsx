@@ -33,8 +33,10 @@ interface UploadIssueResponse {
   submit_token: string;
 }
 
+// text-base on phones: iOS Safari zooms the page when focusing inputs
+// smaller than 16px.
 const inputClass =
-  "w-full border-[3px] border-edge bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent";
+  "w-full border-[3px] border-edge bg-background px-3 py-2.5 text-base text-foreground outline-none focus:border-accent sm:py-2 sm:text-sm";
 const labelClass = "font-display text-[8px] uppercase text-faded sm:text-[9px]";
 
 function GatePanel({ title, body }: { title: string; body: string }) {

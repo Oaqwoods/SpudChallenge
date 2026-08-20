@@ -36,7 +36,7 @@ export function RulesList() {
 
 export default function RulesSection() {
   return (
-    <section id="rules" aria-labelledby="rules-heading" className="mx-auto max-w-3xl px-4 py-8">
+    <section id="rules" aria-labelledby="rules-heading" className="mx-auto max-w-3xl scroll-mt-20 px-4 py-8">
       <SectionHeading id="rules-heading">Rules</SectionHeading>
       <Panel className="mt-4 p-5">
         <RulesList />

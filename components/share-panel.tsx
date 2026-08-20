@@ -21,7 +21,7 @@ import {
 } from "@/lib/share";
 
 const shareButtonClass =
-  "border-2 border-edge px-3 py-2 font-display text-[8px] uppercase tracking-wider text-faded transition-colors hover:border-accent hover:text-accent";
+  "border-2 border-edge px-3 py-2.5 font-display text-[8px] uppercase tracking-wider text-faded transition-colors hover:border-accent hover:text-accent sm:py-2";
 const socialLinkClass = `${shareButtonClass} inline-block no-underline`;
 
 function siteBaseUrl(): string {

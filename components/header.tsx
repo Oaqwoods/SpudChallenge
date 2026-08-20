@@ -20,10 +20,14 @@ export function Header() {
         </div>
         <nav
           aria-label="Page sections"
-          className="flex flex-wrap gap-x-3 gap-y-1 font-display text-[9px] sm:text-[10px]"
+          className="flex flex-wrap gap-x-2 gap-y-1 font-display text-[9px] sm:text-[10px]"
         >
           {NAV.map(([href, label]) => (
-            <a key={href} href={href} className="text-faded transition-colors hover:text-accent">
+            <a
+              key={href}
+              href={href}
+              className="px-1 py-2 text-faded transition-colors hover:text-accent sm:py-1"
+            >
               {label}
             </a>
           ))}

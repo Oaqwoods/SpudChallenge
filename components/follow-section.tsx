@@ -15,8 +15,10 @@ interface SignupResponse {
   email_sent: boolean;
 }
 
+// text-base on phones: iOS Safari zooms the page when focusing inputs
+// smaller than 16px.
 const inputClass =
-  "w-full border-[3px] border-edge bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent";
+  "w-full border-[3px] border-edge bg-background px-3 py-3 text-base text-foreground outline-none focus:border-accent sm:py-2 sm:text-sm";
 const labelClass = "font-display text-[8px] uppercase text-faded sm:text-[9px]";
 
 function FollowForm() {
@@ -275,7 +277,7 @@ function FollowerWall() {
 
 export function FollowSection() {
   return (
-    <section id="follow" aria-labelledby="follow-heading" className="mx-auto max-w-3xl px-4 py-8">
+    <section id="follow" aria-labelledby="follow-heading" className="mx-auto max-w-3xl scroll-mt-20 px-4 py-8">
       <SectionHeading id="follow-heading">Follow Every Trade</SectionHeading>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <FollowForm />

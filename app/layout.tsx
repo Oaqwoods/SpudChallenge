@@ -1,7 +1,13 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Press_Start_2P } from "next/font/google";
 import { PageViewTracker } from "@/components/analytics-tracker";
 import "./globals.css";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0a0a0f",
+};
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

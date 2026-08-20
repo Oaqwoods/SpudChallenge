@@ -11,7 +11,7 @@ const STEPS = [
 
 export function HowItWorks() {
   return (
-    <section id="how" aria-labelledby="how-heading" className="mx-auto max-w-3xl px-4 py-8">
+    <section id="how" aria-labelledby="how-heading" className="mx-auto max-w-3xl scroll-mt-20 px-4 py-8">
       <SectionHeading id="how-heading">How It Works</SectionHeading>
       <Panel className="mt-4 p-5">
         <ol className="grid gap-4 sm:grid-cols-2">
