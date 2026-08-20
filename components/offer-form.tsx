@@ -486,6 +486,10 @@ export function OfferForm() {
           I accept the{" "}
           <Link href="/terms/" className="text-accent underline">Terms of Participation</Link>.
         </label>
+        <p className="pl-6 text-xs text-faded">
+          How your offer data is handled:{" "}
+          <Link href="/privacy/" className="text-accent underline">Privacy Policy</Link>.
+        </p>
       </div>
 
       {status === "error" ? (
