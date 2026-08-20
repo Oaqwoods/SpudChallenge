@@ -26,6 +26,7 @@ const ALLOWED_EVENTS: ReadonlySet<string> = new Set([
 
 const RATE_LIMIT = 300;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
+const MAX_BODY_BYTES = 16_384;
 
 function json(data: unknown, status: number, cors: Record<string, string>): Response {
   return new Response(JSON.stringify(data), {
@@ -49,6 +50,10 @@ Deno.serve(async (req) => {
   }
   if (!checkRateLimit(`track:${clientIp(req)}`, RATE_LIMIT, RATE_WINDOW_MS)) {
     // Analytics must never hurt the visitor: report success and drop it.
+    return json({ ok: true }, 200, cors);
+  }
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
+    // Oversized telemetry bodies are abuse, never legitimate events.
     return json({ ok: true }, 200, cors);
   }
 

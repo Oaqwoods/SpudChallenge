@@ -9,6 +9,8 @@ offline/in person; completed trades are published through the admin dashboard.
 
 The full product and security requirements live in `QWEN_BUILD_SPEC(1).md`.
 The step-by-step build prompts live in `QWEN_PROMPT_PLAYBOOK(1).md`.
+The security model, known limitations and operational precautions live in
+`SECURITY.md`.
 
 ## Stack
 

@@ -12,6 +12,7 @@ import { verifyPreferenceToken } from "../_shared/token.ts";
 
 const RATE_LIMIT = 20;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
+const MAX_BODY_BYTES = 16_384;
 
 function json(data: unknown, status: number, cors: Record<string, string>): Response {
   return new Response(JSON.stringify(data), {
@@ -35,6 +36,9 @@ Deno.serve(async (req) => {
   }
   if (!checkRateLimit(`prefs:${clientIp(req)}`, RATE_LIMIT, RATE_WINDOW_MS)) {
     return json({ error: "Too many requests. Please try again in a few minutes." }, 429, cors);
+  }
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
+    return json({ error: "Request too large." }, 413, cors);
   }
 
   try {
