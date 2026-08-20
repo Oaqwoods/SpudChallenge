@@ -7,6 +7,7 @@ import { publicMediaUrl } from "@/lib/supabase";
 import { formatDate, formatUsd } from "@/lib/format";
 import { Panel, SectionHeading } from "@/components/ui";
 import { OfferCta } from "@/components/ctas";
+import { SharePanel } from "@/components/share-panel";
 
 export function CurrentItem() {
   const { settings, trades } = useChallenge();
@@ -78,6 +79,7 @@ export function CurrentItem() {
             </div>
           </div>
         </div>
+        <SharePanel />
       </Panel>
     </section>
   );

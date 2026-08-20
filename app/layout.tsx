@@ -29,11 +29,23 @@ export const metadata: Metadata = {
   },
   description:
     "We started with $1 and have 21 days to trade our way to $5 million. Follow every trade or offer something better.",
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     siteName: "ONE → FIVE",
     title: "ONE → FIVE — $1 → $5,000,000 in 21 Days",
     description: "21 Days. Only Trades. Follow every trade or offer something better.",
+    url: "/",
     type: "website",
+    images: [
+      {
+        url: "/og/challenge.png",
+        width: 1200,
+        height: 630,
+        alt: "ONE → FIVE — $1 → $5,000,000 in 21 days. Only trades, no added cash, and the clock never resets.",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
