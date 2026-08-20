@@ -35,6 +35,13 @@ jobs:
 
       - name: Build static export
         run: npm run build
+        # NEXT_PUBLIC_* values are inlined into the browser bundle at build
+        # time. They are public by design (see .env.example) and live in the
+        # repo's Actions *variables* — never in secrets-bearing files.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
