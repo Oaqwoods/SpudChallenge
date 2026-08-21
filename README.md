@@ -184,6 +184,9 @@ single row (`id = 1`) via the SQL editor or the admin dashboard.
    capture gates close automatically. Pauses are available at any time via
    `offers_paused` / `follower_signups_paused`.
 
+For the full day-by-day owner runbook (launch, daily routine, completion,
+emergencies), see [OPERATIONS.md](OPERATIONS.md).
+
 ## Analytics
 
 Lightweight, privacy-light, first-party telemetry — no third-party SDKs, no
