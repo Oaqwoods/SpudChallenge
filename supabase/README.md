@@ -14,6 +14,7 @@ exception).
 | `20260813000006_publish_trade.sql` | `trades.private_completion_notes` + transactional `publish_trade(...)` RPC (all-or-nothing publish, Bitcoin exception validation, draft broadcast; playbook PROMPT 11 / spec §6.5, §38) |
 | `20260820000007_broadcast_recipients.sql` | `email_broadcast_recipients` per-recipient send log for broadcasts (status/errors, safe retry, audit; playbook PROMPT 12 / spec §7.3) |
 | `20260820000008_analytics_events.sql` | `analytics_events` privacy-light telemetry table (event allowlist constraint, admin-read RLS; playbook PROMPT 14 / spec §13) |
+| `20260821000009_seed_initial_challenge.sql` | PROMPT 19 safe seed guard: inserts the canonical prelaunch row if missing, never overwrites an existing admin-owned row, leaves `start_at`/`end_at` NULL and verifies the effective initial state |
 
 ## Applying the migrations
 

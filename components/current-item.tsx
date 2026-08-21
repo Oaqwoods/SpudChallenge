@@ -26,19 +26,13 @@ export function CurrentItem() {
       <Panel className="mt-4 overflow-hidden">
         <div className="grid sm:grid-cols-[240px_1fr]">
           <div className="flex aspect-square items-center justify-center border-b-[3px] border-edge bg-background sm:border-b-0 sm:border-r-[3px]">
-            {s.current_item_image_path ? (
-              <Image
-                src={publicMediaUrl(s.current_item_image_path)}
-                alt={s.current_item_name}
-                width={640}
-                height={640}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span aria-hidden="true" className="font-display text-6xl text-accent">
-                $
-              </span>
-            )}
+            <Image
+              src={s.current_item_image_path ? publicMediaUrl(s.current_item_image_path) : "/images/current-item-placeholder.png"}
+              alt={s.current_item_name}
+              width={640}
+              height={640}
+              className="h-full w-full object-cover"
+            />
           </div>
           <div className="flex flex-col gap-3 p-5">
             <h3 className="font-display text-sm leading-relaxed text-foreground sm:text-base">

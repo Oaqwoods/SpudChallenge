@@ -155,9 +155,18 @@ correct once the domain serves HTTPS.
 
 ### Seeding the initial $1 challenge
 
-Migration 4 already seeds `challenge_settings` (title ONE → FIVE, $1 start,
-$5M target, `prelaunch`). To reset or adjust: edit the single row
-(`id = 1`) via the SQL editor or the admin dashboard.
+Migration 4 seeds `challenge_settings` (title ONE → FIVE, $1 start,
+$5M target, `prelaunch`) and migration 9 is the idempotent seed guard:
+it inserts the canonical initial row if it is missing, never overwrites
+an existing (admin-owned) row, and leaves `start_at`/`end_at` NULL —
+the challenge dates are configured by the admin, never hardcoded.
+
+Until a real photo is published, the Current Item panel shows the
+replaceable placeholder `public/images/current-item-placeholder.png`.
+Swap that file, or upload an image to the public `trade-media` bucket
+and set `current_item_image_path` on the settings row; publishing the
+first trade replaces it automatically. To reset or adjust: edit the
+single row (`id = 1`) via the SQL editor or the admin dashboard.
 
 ### Switching prelaunch → active → complete
 
