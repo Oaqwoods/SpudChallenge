@@ -5,6 +5,7 @@ import { Panel } from "@/components/ui";
 export const metadata: Metadata = {
   title: "Terms of Participation",
   description: "Terms of Participation for the ONE → FIVE 21-day trade challenge.",
+  alternates: { canonical: "/terms/" },
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

@@ -25,6 +25,16 @@ export function edgeFunctionUrl(name: string): string | null {
   return `${url}/functions/v1/${name}`;
 }
 
+// Headers for public Edge Function calls. The anon key is public by design;
+// sending it as bearer keeps calls working when a function is deployed with
+// JWT verification enabled.
+export function edgeHeaders(): Record<string, string> {
+  return {
+    "content-type": "application/json",
+    ...(anonKey ? { authorization: `Bearer ${anonKey}` } : {}),
+  };
+}
+
 // Error carrying the HTTP status and parsed JSON payload so callers can react
 // to structured failure codes (e.g. current_item_changed).
 export class EdgeFunctionError extends Error {

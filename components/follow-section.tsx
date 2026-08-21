@@ -34,6 +34,7 @@ function FollowForm() {
   const [website, setWebsite] = useState("");
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
 
   if (paused) {
     return (
@@ -51,8 +52,12 @@ function FollowForm() {
       <Panel className="p-6 text-center" role="status">
         <p className="font-display text-xs text-mint">YOU&apos;RE ON THE LIST</p>
         <p className="mt-3 text-sm leading-relaxed text-foreground">{message}</p>
+        {emailSent ? (
+          <p className="mt-3 text-xs text-faded">Check your inbox for a confirmation email.</p>
+        ) : null}
         <p className="mt-3 text-xs text-faded">
-          Wrong choice? Submit again with the same email to update your preferences.
+          To add an option later, submit again with the same email. To stop
+          trade emails, use the unsubscribe link in any update.
         </p>
       </Panel>
     );
@@ -93,6 +98,7 @@ function FollowForm() {
         ...readUtm(),
       });
       setStatus("success");
+      setEmailSent(res.email_sent);
       track("follower_submitted");
       if (res.trade_interest) track("potential_trader_captured");
       if (res.email_updates_opt_in && res.trade_interest) {

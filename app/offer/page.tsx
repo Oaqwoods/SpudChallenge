@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   title: "I Have Something Better",
   description:
     "Offer a trade for the current ONE → FIVE challenge item. Submission is not acceptance.",
+  alternates: { canonical: "/offer/" },
 };
 
 export default function OfferPage() {

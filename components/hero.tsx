@@ -2,7 +2,9 @@
 
 import { useChallenge } from "@/components/challenge-provider";
 import { DEFAULT_SETTINGS } from "@/lib/challenge";
+import { formatUsd } from "@/lib/format";
 import { OfferCta, FollowCta } from "@/components/ctas";
+import { Panel } from "@/components/ui";
 
 export function Hero() {
   const { settings } = useChallenge();
@@ -26,6 +28,18 @@ export function Hero() {
         <p className="font-display text-[10px] uppercase tracking-widest text-foreground sm:text-xs">
           21 Days. Only Trades.
         </p>
+        <div className="grid w-full max-w-xs grid-cols-2 gap-2">
+          <Panel className="px-3 py-3 text-center">
+            <p className="font-display text-[8px] uppercase text-faded">Current Value</p>
+            <p className="mt-2 font-display text-lg text-mint">
+              {formatUsd(s.current_item_value)}
+            </p>
+          </Panel>
+          <Panel className="px-3 py-3 text-center">
+            <p className="font-display text-[8px] uppercase text-faded">Trade #</p>
+            <p className="mt-2 font-display text-lg text-accent">{s.current_trade_number}</p>
+          </Panel>
+        </div>
         <p className="max-w-xl text-sm leading-relaxed text-faded">
           We started with one dollar. We can only trade what we currently have.
           No adding cash to a trade. The clock never resets.

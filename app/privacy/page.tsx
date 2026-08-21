@@ -5,6 +5,7 @@ import { Panel } from "@/components/ui";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description: "Privacy policy for the ONE → FIVE 21-day trade challenge.",
+  alternates: { canonical: "/privacy/" },
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

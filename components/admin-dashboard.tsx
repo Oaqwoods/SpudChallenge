@@ -255,6 +255,9 @@ export function AdminDashboard() {
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="font-display text-base text-accent sm:text-lg">DASHBOARD</h1>
         <div className="flex items-center gap-3">
+          <Link href="/admin/settings/" className="text-xs text-faded underline hover:text-accent">
+            Launch controls
+          </Link>
           <Link href="/admin/emails/" className="text-xs text-faded underline hover:text-accent">
             Email broadcasts
           </Link>

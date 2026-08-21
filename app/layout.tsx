@@ -36,9 +36,6 @@ export const metadata: Metadata = {
   },
   description:
     "We started with $1 and have 21 days to trade our way to $5 million. Follow every trade or offer something better.",
-  alternates: {
-    canonical: "/",
-  },
   openGraph: {
     siteName: "ONE → FIVE",
     title: "ONE → FIVE — $1 → $5,000,000 in 21 Days",

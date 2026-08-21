@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/time.test.ts tests/challenge.test.ts tests/format.test.ts tests/preferences.test.ts tests/offer.test.ts tests/cors.test.ts tests/admin-auth.test.ts tests/admin-offers.test.ts tests/publish-trade.test.ts tests/broadcast.test.ts tests/share.test.ts tests/seed.test.ts"
+    "test": "node --test tests/time.test.ts tests/challenge.test.ts tests/format.test.ts tests/preferences.test.ts tests/offer.test.ts tests/cors.test.ts tests/admin-auth.test.ts tests/admin-offers.test.ts tests/publish-trade.test.ts tests/broadcast.test.ts tests/share.test.ts tests/seed.test.ts tests/admin-settings.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

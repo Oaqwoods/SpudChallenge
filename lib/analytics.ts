@@ -3,7 +3,7 @@
 // only the event name, pathname, UTMs and a coarse detail string — never
 // emails, phone numbers, offer text or uploaded files.
 
-import { edgeFunctionUrl } from "@/lib/supabase";
+import { edgeFunctionUrl, edgeHeaders } from "@/lib/supabase";
 import { readUtm } from "@/lib/utm";
 
 // Mirrors the analytics_events_name check constraint (migration 8) and the
@@ -37,7 +37,7 @@ export function track(event: AnalyticsEvent, detail?: string): void {
   // the page). Failures are swallowed by design.
   fetch(endpoint, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: edgeHeaders(),
     body: JSON.stringify(payload),
     keepalive: true,
   }).catch(() => {});

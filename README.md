@@ -170,8 +170,10 @@ single row (`id = 1`) via the SQL editor or the admin dashboard.
 
 ### Switching prelaunch → active → complete
 
-1. **Activate**: from the admin dashboard, set status `active`, set
-   `start_at` (clock starts), `end_at = start_at + 21 days`, and fill the
+1. **Activate**: from the admin dashboard, open **Launch controls**
+   (`/admin/settings/`). Either press **START CHALLENGE NOW** (confirm-
+   protected; sets status `active`, `start_at` to now, `end_at` to
+   `start_at + 21 days`), or set the schedule manually and save. Fill the
    current-item fields (the $1 item + photo in `trade-media`). Offers and
    follower emails open automatically.
 2. **During**: publish completed trades through the trade workflow; drafts
