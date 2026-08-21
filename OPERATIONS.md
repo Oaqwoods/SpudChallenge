@@ -53,6 +53,10 @@ Function items marked **[deploy]**.
    followers receive it; retries never double-send.
 6. **Glance at the site** — current item panel, journey card, and
    scoreboard reflect the new trade.
+7. **Follower wall** — `/admin/followers/` shows group counts (ongoing
+   email followers / trade-interest leads / both) and lets you hide or
+   re-show any public wall entry. Unsubscribes leave the wall
+   automatically; nothing here sends email.
 
 ## If something needs a pause
 

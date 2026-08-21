@@ -258,6 +258,9 @@ export function AdminDashboard() {
           <Link href="/admin/settings/" className="text-xs text-faded underline hover:text-accent">
             Launch controls
           </Link>
+          <Link href="/admin/followers/" className="text-xs text-faded underline hover:text-accent">
+            Followers
+          </Link>
           <Link href="/admin/emails/" className="text-xs text-faded underline hover:text-accent">
             Email broadcasts
           </Link>
