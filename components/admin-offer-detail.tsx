@@ -373,7 +373,8 @@ export function AdminOfferDetail() {
       </div>
       <p className="mt-1 text-xs text-faded">
         Offered against Trade #{offer.offered_against_trade_number} —{" "}
-        {offer.offered_against_item_name} · Submitted {formatDateTime(offer.created_at)}
+        {offer.offered_against_item_name} ({formatUsd(offer.offered_against_item_value)}) ·
+        Submitted {formatDateTime(offer.created_at)}
       </p>
 
       <p

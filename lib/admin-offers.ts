@@ -75,6 +75,7 @@ export interface AdminOfferRow {
   phone: string | null;
   offered_against_trade_number: number;
   offered_against_item_name: string;
+  offered_against_item_value: number;
   item_name: string;
   item_description: string;
   claimed_value: number;
@@ -127,6 +128,7 @@ export function toAdminOffer(row: Record<string, unknown>): AdminOfferRow | null
     phone: toStr(row.phone),
     offered_against_trade_number: toNum(row.offered_against_trade_number),
     offered_against_item_name: toStr(row.offered_against_item_name) ?? "",
+    offered_against_item_value: toNum(row.offered_against_item_value),
     item_name: toStr(row.item_name) ?? "",
     item_description: toStr(row.item_description) ?? "",
     claimed_value: toNum(row.claimed_value),

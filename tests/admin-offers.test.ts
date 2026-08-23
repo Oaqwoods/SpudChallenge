@@ -28,6 +28,7 @@ function makeOffer(overrides: Partial<AdminOfferRow> = {}): AdminOfferRow {
     phone: null,
     offered_against_trade_number: 1,
     offered_against_item_name: "One U.S. Dollar",
+    offered_against_item_value: 1,
     item_name: "Vintage Lamp",
     item_description: "A lamp.",
     claimed_value: 120,
@@ -175,6 +176,7 @@ test("toAdminOffer coerces PostgREST numerics and rejects bad rows", () => {
     phone: null,
     offered_against_trade_number: 2,
     offered_against_item_name: "Paperclip",
+    offered_against_item_value: "5",
     item_name: "Watch",
     item_description: "A watch.",
     claimed_value: "250.5",
@@ -196,6 +198,11 @@ test("toAdminOffer coerces PostgREST numerics and rejects bad rows", () => {
   assert.equal(row.claimed_value, 250.5);
   assert.equal(row.verified_value, 200);
   assert.equal(row.in_person, false);
+  // The offer-to-current-item snapshot (spec §26) is preserved, with the
+  // numeric target value coerced from the PostgREST string.
+  assert.equal(row.offered_against_trade_number, 2);
+  assert.equal(row.offered_against_item_name, "Paperclip");
+  assert.equal(row.offered_against_item_value, 5);
   // Prompt-25 trail fields default to null when absent.
   assert.equal(row.meetup_scheduled_at, null);
   assert.equal(row.meetup_general_location, null);
