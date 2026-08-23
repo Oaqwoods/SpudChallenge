@@ -9,6 +9,7 @@ import {
   availableDetailActions,
   canSetDetailStatus,
   canSetStatus,
+  canTransition,
   countByStatus,
   filterOffers,
   isOfferStatus,
@@ -49,6 +50,7 @@ function makeOffer(overrides: Partial<AdminOfferRow> = {}): AdminOfferRow {
     meetup_scheduled_at: null,
     meetup_general_location: null,
     did_not_complete_reason: null,
+    last_contacted_at: null,
     created_at: "2026-08-12T12:00:00.000Z",
     ...overrides,
   };
@@ -194,6 +196,11 @@ test("toAdminOffer coerces PostgREST numerics and rejects bad rows", () => {
   assert.equal(row.claimed_value, 250.5);
   assert.equal(row.verified_value, 200);
   assert.equal(row.in_person, false);
+  // Prompt-25 trail fields default to null when absent.
+  assert.equal(row.meetup_scheduled_at, null);
+  assert.equal(row.meetup_general_location, null);
+  assert.equal(row.did_not_complete_reason, null);
+  assert.equal(row.last_contacted_at, null);
 
   // Unknown status or missing id are rejected rather than guessed.
   assert.equal(toAdminOffer({ id: "o-10", status: "accepted" }), null);
@@ -217,10 +224,41 @@ test("uuidFromQuery reads the requested key only", () => {
   assert.equal(uuidFromQuery(`?id=${VALID_UUID}`, "offer"), null);
 });
 
-test("canSetDetailStatus allows the full workflow but not self or completed", () => {
-  for (const action of DETAIL_ACTIONS) {
-    assert.ok(canSetDetailStatus("new", action.status), `new -> ${action.status}`);
+test("canTransition enforces the prompt-25 state machine", () => {
+  // Forward ladder (jumps allowed) plus exits from live states.
+  assert.ok(canTransition("new", "reviewing"));
+  assert.ok(canTransition("new", "shortlisted"));
+  assert.ok(canTransition("reviewing", "selected"));
+  assert.ok(canTransition("shortlisted", "meetup_scheduled"));
+  assert.ok(canTransition("meetup_scheduled", "declined"));
+  // Walk-away exits exist only after pursuit has started (spec §25).
+  assert.ok(canTransition("selected", "did_not_complete"));
+  assert.ok(canTransition("meetup_scheduled", "did_not_complete"));
+  assert.ok(!canTransition("new", "did_not_complete"));
+  assert.ok(!canTransition("reviewing", "did_not_complete"));
+  assert.ok(!canTransition("shortlisted", "did_not_complete"));
+  // No backward jumps on the ladder.
+  assert.ok(!canTransition("meetup_scheduled", "reviewing"));
+  assert.ok(!canTransition("selected", "shortlisted"));
+  assert.ok(!canTransition("reviewing", "new"));
+  // Deliberate re-opens after an ending.
+  assert.ok(canTransition("declined", "reviewing"));
+  assert.ok(canTransition("did_not_complete", "reviewing"));
+  // completed is RPC-only; invalid and completed are terminal.
+  for (const from of OFFER_STATUSES) {
+    assert.ok(!canTransition(from, "completed"), `${from} -> completed`);
   }
+  for (const to of OFFER_STATUSES) {
+    assert.ok(!canTransition("invalid", to), `invalid -> ${to}`);
+    assert.ok(!canTransition("completed", to), `completed -> ${to}`);
+  }
+});
+
+test("canSetDetailStatus agrees with the matrix and never offers completed", () => {
+  assert.ok(canSetDetailStatus("selected", "did_not_complete"));
+  assert.ok(canSetDetailStatus("meetup_scheduled", "did_not_complete"));
+  assert.ok(!canSetDetailStatus("new", "meetup_scheduled"));
+  assert.ok(!canSetDetailStatus("new", "did_not_complete"));
   assert.ok(!canSetDetailStatus("new", "new"));
   assert.ok(!canSetDetailStatus("completed", "reviewing"));
   assert.ok(!canSetDetailStatus("completed", "declined"));
@@ -228,12 +266,29 @@ test("canSetDetailStatus allows the full workflow but not self or completed", ()
   assert.ok(!DETAIL_ACTIONS.some((a) => a.status === "completed"));
 });
 
+test("failed-meetup path: walk away without touching the public challenge", () => {
+  // From a scheduled meetup the operator can walk away…
+  const fromMeetup = availableDetailActions("meetup_scheduled").map((a) => a.status);
+  assert.ok(fromMeetup.includes("did_not_complete"));
+  // …but never publish straight from the offer screen.
+  assert.ok(!fromMeetup.includes("completed"));
+  // After the walk-away the only way back is a deliberate re-open; the offer
+  // cannot jump straight back into the meetup/completion pipeline.
+  assert.deepEqual(
+    availableDetailActions("did_not_complete").map((a) => a.status),
+    ["reviewing"],
+  );
+  assert.ok(!canSetDetailStatus("did_not_complete", "meetup_scheduled"));
+  assert.ok(!canSetDetailStatus("did_not_complete", "selected"));
+});
+
 test("availableDetailActions excludes the current state and locks completed", () => {
   assert.deepEqual(availableDetailActions("completed"), []);
   const fromShortlisted = availableDetailActions("shortlisted").map((a) => a.status);
   assert.ok(!fromShortlisted.includes("shortlisted"));
   assert.ok(fromShortlisted.includes("meetup_scheduled"));
-  assert.ok(fromShortlisted.includes("did_not_complete"));
+  // A shortlisted offer has not been pursued yet, so walk-away is not offered.
+  assert.ok(!fromShortlisted.includes("did_not_complete"));
 });
 
 test("detail actions never use Accept-style final wording", () => {

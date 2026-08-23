@@ -42,12 +42,19 @@ Function items marked **[deploy]**.
 2. **Move good offers** — `reviewing` → `shortlisted` → `selected`.
    Declines never notify the offerer automatically; send any personal
    follow-up yourself.
-3. **Meetup & verify** — schedule the meetup (`meetup_scheduled`), verify
-   the item in person, record verified value + method on the offer detail.
+3. **Meetup & verify** — schedule the meetup from the offer detail
+   (`meetup_scheduled`) and record the **general area only** — the exact
+   location stays private. Verify the item in person, then record verified
+   value + method on the offer detail. Use **Mark contacted** after any
+   call/email so the trail shows when you last reached the offerer.
 4. **Complete the trade** — from the offer detail: Complete Trade → fill
    the new item, photos, story, publicity consent → preview → publish.
    Publishing updates the public item instantly and creates a **draft**
    broadcast email (never auto-sent).
+   - **Walk-away:** if either party backs out before the actual transfer,
+     use **Did Not Complete** and record the reason. Nothing public changes
+     (item, value and trade count stay put) and the other shortlisted
+     offers remain available to select.
 5. **Send the trade email** — `/admin/emails/`, preview the draft, then
    send with the two-step confirmation. Only opted-in, non-unsubscribed
    followers receive it; retries never double-send.

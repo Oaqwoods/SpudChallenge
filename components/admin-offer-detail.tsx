@@ -41,6 +41,15 @@ const STATUS_BADGE: Record<OfferStatus, string> = {
   invalid: "border-alert text-alert",
 };
 
+// Live (non-terminal) states where recording a contact makes sense.
+const LIVE_STATUSES: ReadonlyArray<OfferStatus> = [
+  "new",
+  "reviewing",
+  "shortlisted",
+  "selected",
+  "meetup_scheduled",
+];
+
 interface OfferFile {
   id: string;
   storage_path: string;
@@ -119,6 +128,12 @@ export function AdminOfferDetail() {
   const [state, setState] = useState<DetailState>({ phase: "loading" });
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+
+  // Two-step actions (prompt 25): "Schedule Meetup" and "Did Not Complete"
+  // arm an inline input instead of firing immediately, so the meetup area and
+  // the walk-away reason are always captured with the status change.
+  const [armed, setArmed] = useState<OfferStatus | null>(null);
+  const [armedText, setArmedText] = useState("");
 
   // Editable private-admin fields (everything except status, which is action-driven).
   const [verifiedValue, setVerifiedValue] = useState("");
@@ -216,6 +231,86 @@ export function AdminOfferDetail() {
     setNotice({ tone: "ok", text: `Status set to ${OFFER_STATUS_LABELS[next]}.` });
   };
 
+  const onAction = (next: OfferStatus) => {
+    if (next === "meetup_scheduled" || next === "did_not_complete") {
+      setArmed(next);
+      setArmedText("");
+      setNotice(null);
+      return;
+    }
+    void applyStatus(next);
+  };
+
+  const confirmArmed = async () => {
+    if (state.phase !== "ready" || armed === null) return;
+    if (!canSetDetailStatus(state.offer.status, armed)) {
+      setArmed(null);
+      return;
+    }
+    const text = armedText.trim();
+    if (armed === "meetup_scheduled" && text === "") {
+      setNotice({ tone: "error", text: "Enter the general meetup area before scheduling." });
+      return;
+    }
+    if (armed === "did_not_complete" && text === "") {
+      setNotice({ tone: "error", text: "Record why the trade did not complete before closing it." });
+      return;
+    }
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    const fields =
+      armed === "meetup_scheduled"
+        ? {
+            status: armed,
+            meetup_general_location: text,
+            meetup_scheduled_at: new Date().toISOString(),
+          }
+        : {
+            status: armed,
+            did_not_complete_reason: text,
+          };
+
+    setPending(true);
+    setNotice(null);
+    const { error } = await supabase.from("offers").update(fields).eq("id", state.offer.id);
+    setPending(false);
+    if (error) {
+      setNotice({ tone: "error", text: `Could not update status — ${error.message}` });
+      return;
+    }
+    setState({ ...state, offer: { ...state.offer, ...fields } });
+    setArmed(null);
+    setArmedText("");
+    setNotice({
+      tone: "ok",
+      text:
+        armed === "meetup_scheduled"
+          ? "Meetup scheduled. The exact location stays private."
+          : "Marked did not complete. Nothing changed publicly.",
+    });
+  };
+
+  const markContacted = async () => {
+    if (state.phase !== "ready") return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+    const at = new Date().toISOString();
+    setPending(true);
+    setNotice(null);
+    const { error } = await supabase
+      .from("offers")
+      .update({ last_contacted_at: at })
+      .eq("id", state.offer.id);
+    setPending(false);
+    if (error) {
+      setNotice({ tone: "error", text: `Could not record contact — ${error.message}` });
+      return;
+    }
+    setState({ ...state, offer: { ...state.offer, last_contacted_at: at } });
+    setNotice({ tone: "ok", text: "Contact recorded." });
+  };
+
   if (state.phase === "loading") {
     return (
       <main className="mx-auto max-w-3xl px-4 py-8">
@@ -308,18 +403,114 @@ export function AdminOfferDetail() {
               <button
                 key={action.status}
                 type="button"
-                disabled={pending}
-                onClick={() => void applyStatus(action.status)}
+                disabled={pending || armed !== null}
+                onClick={() => onAction(action.status)}
                 className="border-[3px] border-edge px-3 py-2 font-display text-[9px] uppercase tracking-wider text-faded transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {action.label}
               </button>
             ))}
+            {LIVE_STATUSES.includes(offer.status) ? (
+              <button
+                type="button"
+                disabled={pending || armed !== null}
+                onClick={() => void markContacted()}
+                className="border-[3px] border-edge px-3 py-2 font-display text-[9px] uppercase tracking-wider text-faded transition-colors hover:border-mint hover:text-mint disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Mark contacted
+              </button>
+            ) : null}
           </div>
+
+          {armed === "meetup_scheduled" ? (
+            <div className="mt-4 border-[3px] border-edge p-3">
+              <label htmlFor="meetup-location" className={labelClass}>
+                General meetup area (private — never an exact address)
+              </label>
+              <input
+                id="meetup-location"
+                className={`${inputClass} mt-2`}
+                value={armedText}
+                maxLength={200}
+                placeholder="e.g. north Austin, near the Domain"
+                onChange={(e) => setArmedText(e.target.value)}
+              />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => void confirmArmed()}
+                  className="border-[3px] border-accent bg-accent px-4 py-2 font-display text-[9px] uppercase tracking-wider text-black transition-colors hover:bg-transparent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {pending ? "Working…" : "Confirm meetup"}
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => {
+                    setArmed(null);
+                    setArmedText("");
+                  }}
+                  className="border-[3px] border-edge px-4 py-2 font-display text-[9px] uppercase tracking-wider text-faded transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {armed === "did_not_complete" ? (
+            <div className="mt-4 border-[3px] border-edge p-3">
+              <label htmlFor="walkaway-reason" className={labelClass}>
+                Why did the trade not complete? (private)
+              </label>
+              <textarea
+                id="walkaway-reason"
+                rows={2}
+                className={`${inputClass} mt-2`}
+                value={armedText}
+                maxLength={2000}
+                placeholder="e.g. either party walked away after inspection; item condition did not match"
+                onChange={(e) => setArmedText(e.target.value)}
+              />
+              <p className="mt-2 text-[11px] text-faded">
+                Closing an offer here changes nothing publicly — the current
+                item, value and trade count stay exactly as they are.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => void confirmArmed()}
+                  className="border-[3px] border-alert bg-alert px-4 py-2 font-display text-[9px] uppercase tracking-wider text-black transition-colors hover:bg-transparent hover:text-alert disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {pending ? "Working…" : "Confirm did not complete"}
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => {
+                    setArmed(null);
+                    setArmedText("");
+                  }}
+                  className="border-[3px] border-edge px-4 py-2 font-display text-[9px] uppercase tracking-wider text-faded transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {offer.status === "completed" ? (
             <p className="mt-3 text-xs text-faded">
               Completed offers are locked here — their outcome moves through
               the trade-completion workflow.
+            </p>
+          ) : null}
+          {offer.status === "invalid" ? (
+            <p className="mt-3 text-xs text-faded">
+              Invalid offers are terminal. Rare corrections can be made by a
+              developer directly in Supabase.
             </p>
           ) : null}
           {offer.status === "selected" || offer.status === "meetup_scheduled" ? (
@@ -332,6 +523,35 @@ export function AdminOfferDetail() {
           ) : null}
         </Panel>
       </section>
+
+      {offer.last_contacted_at !== null ||
+      offer.meetup_scheduled_at !== null ||
+      offer.meetup_general_location !== null ||
+      offer.did_not_complete_reason !== null ? (
+        <section aria-label="Workflow trail" className="mt-6">
+          <Panel className="p-4">
+            <p className={labelClass}>Workflow trail (private)</p>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <Field label="Last contacted">
+                <Value>
+                  {offer.last_contacted_at ? formatDateTime(offer.last_contacted_at) : "—"}
+                </Value>
+              </Field>
+              <Field label="Meetup scheduled">
+                <Value>
+                  {offer.meetup_scheduled_at ? formatDateTime(offer.meetup_scheduled_at) : "—"}
+                </Value>
+              </Field>
+              <Field label="Meetup area (private — never public)">
+                <Value>{offer.meetup_general_location ?? "—"}</Value>
+              </Field>
+              <Field label="Did-not-complete reason">
+                <Value>{offer.did_not_complete_reason ?? "—"}</Value>
+              </Field>
+            </div>
+          </Panel>
+        </section>
+      ) : null}
 
       <section aria-label="Submitted offer" className="mt-6">
         <Panel className="p-4">

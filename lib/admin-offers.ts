@@ -52,9 +52,10 @@ export const LIST_ACTIONS: ReadonlyArray<{ status: OfferStatus; label: string }>
 
 // Full workflow actions on the offer detail page (playbook prompt 10).
 // Deliberately no "Accept" — nothing here ends the workflow, and selecting
-// or scheduling never changes the public challenge.
+// or scheduling never changes the public challenge. Which of these are
+// offered depends on the transition matrix below (prompt 25).
 export const DETAIL_ACTIONS: ReadonlyArray<{ status: OfferStatus; label: string }> = [
-  { status: "reviewing", label: "Reopen Review" },
+  { status: "reviewing", label: "Start / Reopen Review" },
   { status: "shortlisted", label: "Shortlist" },
   { status: "selected", label: "Select for Verification" },
   { status: "meetup_scheduled", label: "Schedule Meetup" },
@@ -96,6 +97,7 @@ export interface AdminOfferRow {
   meetup_scheduled_at: string | null;
   meetup_general_location: string | null;
   did_not_complete_reason: string | null;
+  last_contacted_at: string | null;
   created_at: string;
 }
 
@@ -147,6 +149,7 @@ export function toAdminOffer(row: Record<string, unknown>): AdminOfferRow | null
     meetup_scheduled_at: toStr(row.meetup_scheduled_at),
     meetup_general_location: toStr(row.meetup_general_location),
     did_not_complete_reason: toStr(row.did_not_complete_reason),
+    last_contacted_at: toStr(row.last_contacted_at),
     created_at: toStr(row.created_at) ?? "",
   };
 }
@@ -201,11 +204,35 @@ export function countByStatus(rows: AdminOfferRow[]): Partial<Record<OfferStatus
   return counts;
 }
 
-// Offers that already completed their real-world transfer are locked from
-// quick list actions: their outcome moves through the trade workflow instead.
-export function canSetStatus(from: OfferStatus, to: OfferStatus): boolean {
+// The offer state machine (playbook prompt 25 / build spec §25). Forward
+// movement down the ladder (forward jumps allowed — a great offer may skip
+// reviewing), walk-away exits once pursuit has started, decline/invalid from
+// any live state, and deliberate re-opens from declined / did_not_complete.
+// `completed` is intentionally absent: it is reachable only through the
+// publish_trade RPC, which independently requires selected/meetup_scheduled
+// plus the explicit real-transfer confirmation. `invalid` and `completed`
+// are terminal. The database enforces the same matrix with a trigger
+// (migration 10), so this guard is the UI's first line, not the last.
+export const OFFER_TRANSITIONS: Record<OfferStatus, readonly OfferStatus[]> = {
+  new: ["reviewing", "shortlisted", "selected", "declined", "invalid"],
+  reviewing: ["shortlisted", "selected", "declined", "invalid"],
+  shortlisted: ["selected", "meetup_scheduled", "declined", "invalid"],
+  selected: ["meetup_scheduled", "did_not_complete", "declined", "invalid"],
+  meetup_scheduled: ["did_not_complete", "declined", "invalid"],
+  declined: ["reviewing"],
+  did_not_complete: ["reviewing"],
+  completed: [],
+  invalid: [],
+};
+
+export function canTransition(from: OfferStatus, to: OfferStatus): boolean {
   if (from === to) return false;
-  if (from === "completed") return false;
+  return OFFER_TRANSITIONS[from].includes(to);
+}
+
+// Quick list actions: allowed only when the transition matrix agrees.
+export function canSetStatus(from: OfferStatus, to: OfferStatus): boolean {
+  if (!canTransition(from, to)) return false;
   return LIST_ACTIONS.some((action) => action.status === to);
 }
 
@@ -213,12 +240,10 @@ export function availableActions(from: OfferStatus): ReadonlyArray<{ status: Off
   return LIST_ACTIONS.filter((action) => canSetStatus(from, action.status));
 }
 
-// Detail-page transitions: the full action set minus the current state.
-// Completed offers stay locked — their outcome moves through the trade
-// workflow (playbook prompt 11). Nothing here touches the public challenge.
+// Detail-page transitions: the action set minus whatever the matrix forbids
+// from the current state. Nothing here touches the public challenge.
 export function canSetDetailStatus(from: OfferStatus, to: OfferStatus): boolean {
-  if (from === to) return false;
-  if (from === "completed") return false;
+  if (!canTransition(from, to)) return false;
   return DETAIL_ACTIONS.some((action) => action.status === to);
 }
 
