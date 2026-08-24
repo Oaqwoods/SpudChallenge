@@ -58,6 +58,38 @@ admin user is provisioned by hand, once:
 3. **Close public signups** — *Authentication → Sign In / Up → Sign ups*:
    turn **off**. V1 has exactly one admin; there is no public registration.
 
+### Password recovery
+
+If the admin password is lost, request a reset link from the app itself:
+
+1. On `/admin/login/`, choose **Forgot your password?**, enter the admin
+   email and send. The app calls `supabase.auth.resetPasswordForEmail` with
+   the anon key and an explicit `redirectTo` of
+   `https://spudchallenge.online/admin/reset-password`; Supabase
+   rate-limits the request and never reveals whether the address exists.
+2. The emailed link lands on `/admin/reset-password/`, where the admin sets
+   a new password (project requirement: at least 8 characters, both fields
+   must match). The page only works with the recovery session created by the
+   link; invalid/expired links show a message instead of a blank page.
+3. The update calls `supabase.auth.updateUser` with the anon-key browser
+   client — no service-role key is involved, and neither `app_admins`
+   membership nor the user's UUID changes. After the update the admin signs
+   in at `/admin/login/` with the new password.
+
+Required URL configuration (dashboard → *Authentication → URL
+Configuration*):
+
+- **Site URL** stays `https://spudchallenge.online` — recovery does not rely
+  on it because the app passes an explicit `redirectTo`.
+- **Redirect URLs**: add
+  `https://spudchallenge.online/admin/reset-password` — the exact value used
+  as `redirectTo` (no trailing slash) — plus
+  `http://localhost:3000/admin/reset-password` for local testing.
+
+Note: the dashboard's *Send password recovery email* button redirects to the
+Site URL (the homepage) rather than the reset page, so prefer the in-app
+flow above.
+
 Security notes:
 
 - Passwords live only in Supabase Auth — none are hardcoded in this repo.

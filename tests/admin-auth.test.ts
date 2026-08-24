@@ -3,7 +3,15 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { friendlyAuthMessage, interpretAdminProbe } from "../lib/admin-auth.ts";
+import {
+  ADMIN_PASSWORD_MIN_LENGTH,
+  friendlyAuthMessage,
+  friendlyPasswordUpdateMessage,
+  interpretAdminProbe,
+  isRecoverySession,
+  passwordResetRedirectTo,
+  validateNewPassword,
+} from "../lib/admin-auth.ts";
 
 const ADMIN_USER = { id: "0b5f2f1e-2f3b-4d3a-9f1f-0d0e6b4b1a11", email: "admin@example.com" };
 
@@ -73,6 +81,93 @@ test("friendlyAuthMessage maps Supabase failures to safe wording", () => {
 
 test("friendlyAuthMessage never echoes unknown server messages", () => {
   const message = friendlyAuthMessage({ message: "internal stack trace: secret=abc" });
+  assert.ok(!message.includes("secret"));
+  assert.ok(!message.includes("stack trace"));
+});
+
+test("validateNewPassword enforces the project password requirements", () => {
+  assert.equal(validateNewPassword("", ""), "Please enter the new password in both fields.");
+  assert.equal(
+    validateNewPassword("hunter2hunter2", ""),
+    "Please enter the new password in both fields.",
+  );
+  assert.equal(
+    validateNewPassword("short", "short"),
+    `Password must be at least ${ADMIN_PASSWORD_MIN_LENGTH} characters.`,
+  );
+  // Boundary: one below the minimum fails, exactly the minimum passes.
+  assert.notEqual(
+    validateNewPassword("a".repeat(ADMIN_PASSWORD_MIN_LENGTH - 1), "a".repeat(ADMIN_PASSWORD_MIN_LENGTH - 1)),
+    null,
+  );
+  assert.equal(
+    validateNewPassword("a".repeat(ADMIN_PASSWORD_MIN_LENGTH), "a".repeat(ADMIN_PASSWORD_MIN_LENGTH)),
+    null,
+  );
+  assert.equal(validateNewPassword("correcthorse", "differenthorse"), "The passwords do not match.");
+});
+
+test("isRecoverySession only accepts recovery-stamped sessions", () => {
+  assert.equal(isRecoverySession(null), false);
+  assert.equal(isRecoverySession({ user: null }), false);
+  assert.equal(isRecoverySession({ user: {} }), false);
+  assert.equal(isRecoverySession({ user: { recovery_sent_at: undefined } }), false);
+  assert.equal(
+    isRecoverySession({ user: { recovery_sent_at: "2026-08-24T10:00:00Z" } }),
+    true,
+  );
+});
+
+test("passwordResetRedirectTo builds the allowlisted reset URL", () => {
+  // Canonical site URL wins and is normalized (no trailing slash).
+  assert.equal(
+    passwordResetRedirectTo("https://spudchallenge.online", "http://localhost:3000"),
+    "https://spudchallenge.online/admin/reset-password",
+  );
+  assert.equal(
+    passwordResetRedirectTo("https://spudchallenge.online/", "http://localhost:3000"),
+    "https://spudchallenge.online/admin/reset-password",
+  );
+  // Missing/blank site URL falls back to the current origin (local dev).
+  assert.equal(
+    passwordResetRedirectTo(undefined, "http://localhost:3000"),
+    "http://localhost:3000/admin/reset-password",
+  );
+  assert.equal(
+    passwordResetRedirectTo("   ", "http://localhost:3000"),
+    "http://localhost:3000/admin/reset-password",
+  );
+});
+
+test("friendlyPasswordUpdateMessage maps update failures to safe wording", () => {
+  assert.equal(
+    friendlyPasswordUpdateMessage({ message: "Rate limit reached" }),
+    "Too many attempts. Please wait a few minutes and try again.",
+  );
+  assert.equal(
+    friendlyPasswordUpdateMessage(new TypeError("Failed to fetch")),
+    "Connection problem. Check your network and try again.",
+  );
+  assert.equal(
+    friendlyPasswordUpdateMessage({ message: "Password should be at least 6 characters" }),
+    `Password must be at least ${ADMIN_PASSWORD_MIN_LENGTH} characters.`,
+  );
+  assert.equal(
+    friendlyPasswordUpdateMessage({ message: "AuthSessionMissingError: Auth session missing!" }),
+    "This reset link is no longer valid. Request a new one from the admin sign-in page and try again.",
+  );
+  assert.equal(
+    friendlyPasswordUpdateMessage({ message: "Something exploded" }),
+    "Password update failed. Please try again.",
+  );
+  assert.equal(
+    friendlyPasswordUpdateMessage(null),
+    "Password update failed. Please try again.",
+  );
+});
+
+test("friendlyPasswordUpdateMessage never echoes unknown server messages", () => {
+  const message = friendlyPasswordUpdateMessage({ message: "internal stack trace: secret=abc" });
   assert.ok(!message.includes("secret"));
   assert.ok(!message.includes("stack trace"));
 });

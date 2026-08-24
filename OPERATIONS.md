@@ -86,6 +86,12 @@ Function items marked **[deploy]**.
 
 ## Emergency contacts & rollbacks
 
+- Lost admin password: `/admin/login/` → **Forgot your password?** → enter
+  the admin email → open the emailed link (lands on
+  `/admin/reset-password/`) → set a new password (at least 8 characters) →
+  sign in at `/admin/login/`. If the link reports invalid/expired, request
+  a fresh one. Requires the redirect URL described in `supabase/README.md`
+  → Password recovery.
 - Broken deploy: Actions → rerun the last good workflow, or push a revert
   commit. Static hosting means the previous build is never lost.
 - Bad publish: correct the trade via the DB (a safe admin edit screen is

@@ -21,6 +21,11 @@ import { getSupabase } from "@/lib/supabase";
 import { Panel } from "@/components/ui";
 
 const LOGIN_PATH = "/admin/login";
+const RESET_PATH = "/admin/reset-password";
+// Public admin routes that must render without an admin session: sign-in,
+// and password recovery (the visitor holds a recovery session from the
+// emailed link instead).
+const PUBLIC_ADMIN_PATHS = [LOGIN_PATH, `${LOGIN_PATH}/`, RESET_PATH, `${RESET_PATH}/`];
 const UNCONFIGURED: AdminCheck = {
   status: "error",
   message: "Admin is not configured yet (missing Supabase configuration).",
@@ -59,7 +64,7 @@ function NeutralPlaceholder() {
 
 export function AdminArea({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isLoginRoute = pathname === LOGIN_PATH || pathname === `${LOGIN_PATH}/`;
+  const isPublicAdminRoute = PUBLIC_ADMIN_PATHS.includes(pathname);
 
   const [check, setCheck] = useState<AdminCheck | null>(null);
 
@@ -73,7 +78,7 @@ export function AdminArea({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (isLoginRoute) return;
+    if (isPublicAdminRoute) return;
 
     let cancelled = false;
     const guardedCheck = async () => {
@@ -108,7 +113,7 @@ export function AdminArea({ children }: { children: ReactNode }) {
       cancelled = true;
       subscription?.unsubscribe();
     };
-  }, [isLoginRoute]);
+  }, [isPublicAdminRoute]);
 
   const sessionValue = useMemo<AdminSessionContextValue>(
     () => ({
@@ -123,7 +128,7 @@ export function AdminArea({ children }: { children: ReactNode }) {
     [check],
   );
 
-  if (isLoginRoute) {
+  if (isPublicAdminRoute) {
     return <>{children}</>;
   }
 

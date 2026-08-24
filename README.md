@@ -135,8 +135,10 @@ add it at Spaceship as instructed there. It is not a fixed value.
    `RESEND_FROM`, `PREFERENCE_TOKEN_SECRET`.
 4. Auth: create the operator's admin user (dashboard → Authentication), then
    insert their `auth.uid()` into `app_admins`. In Authentication → URL
-   Configuration, add `https://spudchallenge.online/**` to the allowed
-   redirect URLs.
+   Configuration, keep the Site URL at `https://spudchallenge.online` and
+   add `https://spudchallenge.online/admin/reset-password` (exact value, no
+   trailing slash — it is used as the password-recovery `redirectTo`) to the
+   allowed redirect URLs; see `supabase/README.md` → Password recovery.
 5. CORS: the functions' allowlist already contains
    `https://spudchallenge.online` (see `supabase/functions/_shared/cors.ts`).
 
@@ -154,6 +156,13 @@ correct once the domain serves HTTPS.
 2. Sign in at `/admin/login/`. Non-admin sessions are refused and signed out.
 3. Error logging is Supabase-side (function logs + `analytics_events`);
    there is no third-party error service in V1.
+
+If the admin password is lost: choose **Forgot your password?** on
+`/admin/login/` and enter the admin email. The emailed link opens
+`/admin/reset-password/`, where a new password can be set (8+ characters).
+Both steps use only the anon-key browser client — never the service-role
+key — and neither touches `app_admins` or the user's UUID. Expired/invalid
+links show an explanatory message.
 
 ### Seeding the initial $1 challenge
 

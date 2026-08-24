@@ -97,3 +97,84 @@ export function friendlyAuthMessage(error: unknown): string {
   }
   return "Sign-in failed. Please check your details and try again.";
 }
+
+// ---------------------------------------------------------------------------
+// Password recovery (/admin/reset-password/) — pure helpers, unit tested.
+// ---------------------------------------------------------------------------
+
+// Project password requirement for new admin passwords. Stricter than the
+// Supabase default minimum (6) so a client-side pass implies a server pass.
+export const ADMIN_PASSWORD_MIN_LENGTH = 8;
+
+// Project password requirements for a new/updated admin password. Returns a
+// user-facing error message, or null when the pair is acceptable.
+export function validateNewPassword(password: string, confirm: string): string | null {
+  if (!password || !confirm) {
+    return "Please enter the new password in both fields.";
+  }
+  if (password.length < ADMIN_PASSWORD_MIN_LENGTH) {
+    return `Password must be at least ${ADMIN_PASSWORD_MIN_LENGTH} characters.`;
+  }
+  if (password !== confirm) {
+    return "The passwords do not match.";
+  }
+  return null;
+}
+
+// True when a session was created from a password-recovery email link.
+// Supabase stamps `recovery_sent_at` on the user for recovery sessions;
+// structural typing keeps this free of supabase-js imports for testing.
+export function isRecoverySession(
+  session: { user?: { recovery_sent_at?: string } | null } | null,
+): boolean {
+  return typeof session?.user?.recovery_sent_at === "string";
+}
+
+// Reset-page path, shared by the redirectTo builder and the docs. No
+// trailing slash: it must exactly match the Supabase Redirect URL allowlist
+// entry; GitHub Pages serves the exported page for both forms.
+const RESET_PATH = "/admin/reset-password";
+
+// Where recovery emails should land: the reset page, passed as redirectTo to
+// supabase.auth.resetPasswordForEmail. Must be added to the project's
+// allowed Redirect URLs. Prefers the canonical site URL (inlined at build
+// time), falling back to the current origin for local dev. Trailing slashes
+// are stripped so the value exactly matches the allowlist entry.
+export function passwordResetRedirectTo(
+  siteUrl: string | undefined,
+  origin: string,
+): string {
+  const base = (siteUrl && siteUrl.trim()) || origin;
+  return `${base.replace(/\/+$/, "")}${RESET_PATH}`;
+}
+
+// Friendly wording for supabase.auth.updateUser failures on the reset page.
+// Pure and tested; never echoes raw server messages.
+export function friendlyPasswordUpdateMessage(error: unknown): string {
+  const message =
+    error && typeof error === "object" && "message" in error
+      ? String((error as { message: unknown }).message)
+      : "";
+  const lowered = message.toLowerCase();
+
+  if (
+    lowered.includes("rate limit") ||
+    lowered.includes("too many") ||
+    lowered.includes("security purposes, you can only request this")
+  ) {
+    return "Too many attempts. Please wait a few minutes and try again.";
+  }
+  if (lowered.includes("fetch") || lowered.includes("network")) {
+    return "Connection problem. Check your network and try again.";
+  }
+  if (lowered.includes("password") && (lowered.includes("short") || lowered.includes("at least"))) {
+    return `Password must be at least ${ADMIN_PASSWORD_MIN_LENGTH} characters.`;
+  }
+  if (lowered.includes("same as the current") || lowered.includes("same as your current")) {
+    return "The new password must be different from the current one.";
+  }
+  if (lowered.includes("expired") || lowered.includes("invalid") || lowered.includes("session")) {
+    return "This reset link is no longer valid. Request a new one from the admin sign-in page and try again.";
+  }
+  return "Password update failed. Please try again.";
+}

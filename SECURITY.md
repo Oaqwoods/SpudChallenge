@@ -28,6 +28,19 @@ defensible small-audience deployment, not enterprise hardening. Last review:
   `app_admins`; the edge function `send-broadcast` re-verifies the session
   JWT server-side before sending anything. Non-admin sessions are signed out
   immediately after login attempts.
+- **Admin password recovery** is self-service from the admin sign-in page
+  (**Forgot your password?**), which calls `resetPasswordForEmail` with the
+  anon key and an allowlisted `redirectTo`
+  (`https://spudchallenge.online/admin/reset-password`); Supabase
+  rate-limits requests and never reveals whether the address exists. The
+  public `/admin/reset-password/` page only works with the Supabase recovery
+  session created when the emailed recovery link is clicked; invalid or
+  expired links show an explanatory message instead of a form. The update
+  uses `supabase.auth.updateUser` with the anon-key browser client — no
+  service-role key is involved, and neither `app_admins` membership nor the
+  user's UUID changes. New passwords must be at least 8 characters and
+  match in both fields. The page is excluded from search indexes by the
+  admin layout's robots metadata.
 
 ### Input handling
 
