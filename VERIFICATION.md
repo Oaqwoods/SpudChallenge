@@ -299,3 +299,42 @@ media).** No product features were added.
 | `npm run lint` | clean |
 | `npx tsc --noEmit` | clean |
 | Final production static export/build | clean, 21/21 static pages |
+
+---
+
+## Addendum — PROMPT 37 Spud branding consistency (2026-08-25)
+
+Point-in-time consistency check of the public-facing identity. **Result:
+consistent — no code changes needed.** One hierarchy note: the playbook text
+asks for "ONE → FIVE" as the main visual brand, but the owner's explicit
+branding adjustment (between prompts 34 and 35) supersedes it: **`$1 → $5M`
+is the primary identifier**; "ONE → FIVE" remains only as a secondary
+stylistic phrase (the hero's mint line, fed by the admin-editable
+`challenge_settings.title`).
+
+| Identity element | Where it renders |
+| --- | --- |
+| `$1 → $5M` (primary) | Header logo, footer brand line, admin chrome, browser/OG/Twitter titles and siteName, page descriptions, share copy, email subjects/footers |
+| `$1 → $5,000,000` | Hero H1 (pixel-glow), footer value line, OG PNG headline, metadata description |
+| `ONE → FIVE` (secondary only) | Hero mint line (`challenge_settings.title`, admin-editable); OG PNG small wordmark; operator docs and seed tests |
+| `21 Days. Only Trades.` | Hero tagline, footer, OG/Twitter titles, email footer |
+| `A Trade Challenge by Spud` | Hero kicker, header (md+), footer, email footer; Spud the pixel potato mascot in hero + footer |
+
+Other prompt-37 checks:
+
+- **Operator identity:** "Spud" is the only host identity; legal pages say
+  "the site operator" — no personal/full name appears anywhere in
+  `app/`, `components/`, `lib/` or `public/` (grep-verified, including the
+  GitHub username).
+- **Minimal header/nav:** logo + one tagline + five section anchors; admin
+  chrome is separate and non-public.
+- **Distinct internet experiment, not a portfolio:** retro console styling,
+  mascot, and copy ("Not a marketplace…", "we started with one dollar…")
+  frame the site as a public experiment.
+
+### Verification runs (2026-08-25)
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | clean |
+| `npm run build` (static export) | clean |
