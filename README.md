@@ -75,6 +75,10 @@ GitHub Actions (`.github/workflows/deploy.yml`) builds the static export and
 deploys it to GitHub Pages on every push to `main`. DNS changes are always
 manual owner actions at Spaceship; nothing in this repository mutates DNS.
 
+The consolidated owner go-live / custom-domain checklist (Pages settings,
+Spaceship DNS records, verification, HTTPS, final checks) lives in
+[GO-LIVE.md](GO-LIVE.md).
+
 ### One-time GitHub setup
 
 1. **Repository variables** (Settings → Secrets and variables → Actions →
