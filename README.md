@@ -183,10 +183,12 @@ single row (`id = 1`) via the SQL editor or the admin dashboard.
 
 1. **Activate**: from the admin dashboard, open **Launch controls**
    (`/admin/settings/`). Either press **START CHALLENGE NOW** (confirm-
-   protected; sets status `active`, `start_at` to now, `end_at` to
-   `start_at + 21 days`), or set the schedule manually and save. Fill the
-   current-item fields (the $1 item + photo in `trade-media`). Offers and
-   follower emails open automatically.
+   protected; runs the `start_challenge_now()` RPC — status `active`,
+   `start_at` stamped by the **database** clock, `end_at` exactly
+   `start_at + 21 days`, repeated starts rejected), or set the schedule
+   manually and save for a future start. Fill the current-item fields
+   (the $1 item + photo in `trade-media`). Offers and follower emails open
+   automatically.
 2. **During**: publish completed trades through the trade workflow; drafts
    for broadcast emails appear under `/admin/emails/` and are sent only with
    explicit confirmation.

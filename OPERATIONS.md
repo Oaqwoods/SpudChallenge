@@ -28,9 +28,11 @@ Function items marked **[deploy]**.
    `current_item_image_path` on the settings row (or swap
    `public/images/current-item-placeholder.png`).
 2. Open **Admin → Launch controls** (`/admin/settings/`).
-3. Press **START CHALLENGE NOW** (confirm the checkbox). This sets status
-   `active`, `start_at` to now, `end_at` to +21 days. It cannot be
-   repeated; corrections happen through the schedule fields.
+3. Press **START CHALLENGE NOW** (confirm the checkbox). The start runs
+   server-side: status becomes `active`, `start_at` is stamped by the
+   **database clock** (not your browser), and `end_at` is set to exactly
+   21 days later. It cannot be repeated — a second attempt is rejected.
+   For a future start instead, use the schedule fields below.
 4. Reload the homepage: countdown should switch to "Time Remaining", the
    offer CTA should become active.
 

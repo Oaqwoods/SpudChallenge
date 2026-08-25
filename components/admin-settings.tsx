@@ -144,24 +144,27 @@ export function AdminSettings() {
     await refresh();
   };
 
+  // Prompt 32: the whole transition runs server-side (RPC, migration 16) —
+  // start_at is the database clock, end_at is exactly start_at + 21 days,
+  // and a repeated start is rejected atomically. The browser never supplies
+  // timestamps.
   const startNow = async () => {
     if (state.phase !== "ready" || !canStartChallenge(state.settings) || !confirmStart) return;
     const supabase = getSupabase();
     if (!supabase) return;
     setBusy(true);
     setNotice(null);
-    const window = computeLaunchWindow(Date.now());
-    const { error } = await supabase
-      .from("challenge_settings")
-      .update({ ...window, status: "active" })
-      .eq("id", 1);
+    const { error } = await supabase.rpc("start_challenge_now");
     setBusy(false);
     if (error) {
       setNotice({ tone: "error", text: `Could not start the challenge — ${error.message}` });
       return;
     }
     setConfirmStart(false);
-    setNotice({ tone: "ok", text: "Challenge started. It is now live with a 21-day clock." });
+    setNotice({
+      tone: "ok",
+      text: "Challenge started on the server clock. It is now live with a 21-day clock.",
+    });
     await refresh();
   };
 
@@ -253,12 +256,17 @@ export function AdminSettings() {
         {canStartChallenge(settings) ? (
           <>
             <p className="mt-3 text-xs leading-relaxed text-faded">
-              Sets the status to active right now and starts the 21-day clock:
+              Starts the challenge immediately using the <strong>server
+              clock</strong> (never your browser&apos;s): status becomes
+              active, start_at is the database timestamp, and end_at is
+              exactly 21 days later. Starting twice is impossible — a repeat
+              attempt is rejected.
             </p>
             {previewWindow ? (
               <p className="mt-2 font-display text-[10px] text-foreground sm:text-xs">
-                Starts {formatDateTime(previewWindow.start_at)} · Ends{" "}
-                {formatDateTime(previewWindow.end_at)}
+                Starts ~{formatDateTime(previewWindow.start_at)} · Ends{" "}
+                ~{formatDateTime(previewWindow.end_at)}{" "}
+                <span className="text-faded">(estimate — the server stamps the real values)</span>
               </p>
             ) : null}
             <label className="mt-4 flex cursor-pointer items-start gap-2 text-xs text-faded">
