@@ -194,3 +194,43 @@ prompt-27 changes. Point-in-time as of 2026-08-25.
 | `npm run lint` | clean |
 | `npx tsc --noEmit` | clean |
 | `npm run build` (static export, incl. new `/admin/trades` and `/admin/trades/edit`) | clean, 21/21 static pages |
+
+---
+
+## Addendum — PROMPT 31 GitHub Pages static architecture audit (2026-08-25)
+
+Point-in-time audit of the repository against every prompt-31 requirement.
+**Result: no GitHub Pages blockers found; every requirement verified against
+code, config, the deployed bundle and the live site.** Nothing needed to be
+removed or replaced — the project was built static-first from day one.
+
+| Requirement | Verdict | Evidence |
+| --- | --- | --- |
+| Next.js uses static export | ✅ | `next.config.ts`: `output: "export"`, `trailingSlash: true` (so every route is `/route/index.html`), `images.unoptimized` (no Node-only optimizer) |
+| No Next.js API routes | ✅ | No `app/api/` directory exists |
+| No Server Actions | ✅ | Zero `"use server"` directives in `app/`, `components/`, `lib/` |
+| No runtime middleware | ✅ | No `middleware.ts`; the admin gate is a client-side check and the real authorization is server-side (PostgREST JWT + RLS) |
+| GitHub Actions builds and deploys the static output | ✅ | `.github/workflows/deploy.yml`: `npm ci` → `npm run build` (NEXT_PUBLIC vars from Actions *variables*) → `upload-pages-artifact` of `out/` → `deploy-pages`, on every push to `main` |
+| Bundle contains no Resend/service-role material | ✅ | Three layers: frontend code never references them, `tests/admin-auth.test.ts` walks `app/components/hooks/lib` and fails on any `service_role` pattern, and the **deployed** chunks were downloaded and scanned — only library method names matched (`resend()` OTP, OAuth-admin API surface); the only embedded JWT decodes to `"role": "anon"` |
+| Public submissions call Edge Functions | ✅ | offer form → `offer-upload`/`submit-offer`, follow form → `follow-signup`, unsubscribe → `email-preferences`, analytics → `track-event` — all via `callEdgeFunction` with the anon key |
+| Explicit production CORS allowlist | ✅ | `_shared/cors.ts`: exact origins `https://spudchallenge.online`, `https://oaqwoods.github.io`, `http://localhost:3000`; no wildcards; foreign origins 403; locked by `tests/cors.test.ts` |
+| Admin mutations protected by Auth + RLS/RPC | ✅ | Session JWT validated by PostgREST on every query; RLS policies gate on `is_admin()`; `publish_trade`/`update_published_trade` are SECURITY INVOKER RPCs with `is_admin()` gates and `EXECUTE` limited to `authenticated`; `send-broadcast` re-verifies the JWT + `app_admins` server-side |
+| Email only through Edge Functions | ✅ | `_shared/resend.ts` is imported only by `follow-signup` and `send-broadcast`; nothing in the frontend can send email |
+| Atomic trade publication | ✅ | `publish_trade(...)` — single plpgsql function, settings-row `FOR UPDATE` serialization, five writes commit together or not at all (migration 6, idempotent replay added by migration 12) |
+| Direct navigation to all exported pages | ✅ | Live check (2026-08-25): all 20 routes return 200 — `/`, `/offer/`, `/rules/`, `/privacy/`, `/terms/`, `/unsubscribe/`, every `/admin/*` page, `/og/challenge.png`, `/images/current-item-placeholder.png`, `/sitemap.xml`, `/robots.txt`; `/offer` 301-redirects to `/offer/`; `out/404.html` is emitted for unknown paths |
+| Root URL without a `/SpudChallenge` base path | ✅ | No `basePath`/`assetPrefix`; canonical metadata targets the apex; README forbids baking a repo path into URLs |
+| Canonical/sitemap/OG/email links use the production URL | ✅ | `metadataBase = https://spudchallenge.online`; live HTML shows `rel=canonical`, `og:url`, `og:image` on the apex; `app/sitemap.ts` emits apex URLs only; Resend links use `siteUrl()` (defaults to the apex); share links use `NEXT_PUBLIC_SITE_URL` with a same-origin fallback |
+| Auth redirects + Edge CORS allow the production origin | ✅ | Password recovery `redirectTo` is `https://spudchallenge.online/admin/reset-password` (documented + allowlisted); CORS list contains the apex (above) |
+| Pages + Spaceship setup documented incl. www → apex | ✅ | `README.md` → Deployment: one-time GitHub setup (Actions variables, Pages source, custom domain + `public/CNAME`), Spaceship DNS checklist (four A records, `www` CNAME → `oaqwoods.github.io` so Pages redirects www to apex, optional AAAA, domain verification), and the HTTPS enforcement/smoke-test checklist |
+| Generic static OG metadata | ✅ | Static `openGraph`/`twitter` metadata in `app/layout.tsx` with `public/og/challenge.png` (1200×630) — no dynamic edge solution exists or is needed for V1 |
+
+### Production build (2026-08-25)
+
+`npm run build` (Turbopack) compiled clean: 21/21 static pages prerendered;
+`out/` contains `index.html`, `404.html`, `CNAME`, `sitemap.xml`,
+`robots.txt` and every route directory. **Reported blockers: none.**
+
+Live-verified behaviors: apex serves all routes over HTTPS, bare paths
+301-upgrade to trailing slashes, `https://www.spudchallenge.online/`
+301-redirects to the apex, and the admin area loads (authorization still
+happens server-side).
