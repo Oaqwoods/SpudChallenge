@@ -6,8 +6,10 @@ import { fileURLToPath } from "node:url";
 import {
   ADMIN_PASSWORD_MIN_LENGTH,
   friendlyAuthMessage,
+  friendlyAuthorizationMessage,
   friendlyPasswordUpdateMessage,
   interpretAdminProbe,
+  interpretLoginAttempt,
   isRecoverySession,
   passwordResetRedirectTo,
   validateNewPassword,
@@ -44,6 +46,72 @@ test("interpretAdminProbe never grants admin when the probe errors", () => {
     error: { message: "JWT expired" },
   });
   assert.equal(errored.status, "error");
+});
+
+// Regression (2026-08-25): the live database was missing GRANT SELECT on
+// app_admins, so a perfectly valid signInWithPassword (Auth log: 200 /token)
+// was followed by a PostgREST 401 membership probe, and the form displayed a
+// credentials-flavored message. These tests pin successful-auth outcomes to
+// authorization wording that can never be confused with "wrong password".
+
+test("interpretLoginAttempt: successful auth + app_admins row logs the admin in", () => {
+  assert.deepEqual(
+    interpretLoginAttempt(null, { data: { user_id: ADMIN_USER.id }, error: null }),
+    { kind: "admin" },
+  );
+});
+
+test("interpretLoginAttempt: auth failure is reported as a credential error", () => {
+  const outcome = interpretLoginAttempt({ message: "Invalid login credentials" }, null);
+  assert.deepEqual(outcome, { kind: "auth_failed", message: "Incorrect email or password." });
+});
+
+test("interpretLoginAttempt: successful auth without an app_admins row is an authorization error", () => {
+  const outcome = interpretLoginAttempt(null, { data: null, error: null });
+  assert.equal(outcome.kind, "not_admin");
+  if (outcome.kind !== "not_admin") throw new Error("unreachable");
+  assert.ok(outcome.message.includes("not registered as an admin"));
+  assert.ok(outcome.message.startsWith("Signed in successfully"));
+  assert.ok(!/password/i.test(outcome.message));
+});
+
+test("interpretLoginAttempt: 42501 app_admins permission failure is an authorization error, never 'incorrect password'", () => {
+  const outcome = interpretLoginAttempt(null, {
+    data: null,
+    error: { message: "permission denied for table app_admins", code: "42501" },
+  });
+  assert.equal(outcome.kind, "admin_check_failed");
+  if (outcome.kind !== "admin_check_failed") throw new Error("unreachable");
+  assert.ok(!/incorrect/i.test(outcome.message));
+  assert.ok(!/password/i.test(outcome.message));
+  assert.ok(outcome.message.startsWith("Signed in successfully"));
+  assert.ok(outcome.message.includes("Contact the site operator"));
+});
+
+test("interpretLoginAttempt: probe errors never grant admin, even with a row present", () => {
+  const outcome = interpretLoginAttempt(null, {
+    data: { user_id: ADMIN_USER.id },
+    error: { message: "JWT expired" },
+  });
+  assert.equal(outcome.kind, "admin_check_failed");
+});
+
+test("friendlyAuthorizationMessage stays distinct from authentication wording", () => {
+  for (const err of [
+    { message: "permission denied for table app_admins", code: "42501" },
+    { message: "permission denied for table app_admins" },
+    { message: "This account is not registered as an admin." },
+    new TypeError("Failed to fetch"),
+    { message: "unexpected PostgREST failure" },
+    null,
+  ]) {
+    const message = friendlyAuthorizationMessage(err);
+    assert.ok(!/incorrect email or password/i.test(message), message);
+    assert.ok(!/sign-in failed/i.test(message), message);
+    assert.ok(!/secret|stack trace/.test(message), message);
+  }
+  // And the auth mapper never claims the sign-in succeeded.
+  assert.ok(!/signed in/i.test(friendlyAuthMessage({ message: "Invalid login credentials" })));
 });
 
 test("friendlyAuthMessage maps Supabase failures to safe wording", () => {

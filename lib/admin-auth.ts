@@ -64,6 +64,73 @@ export async function checkAdminSession(supabase: SupabaseClient): Promise<Admin
   return interpretAdminProbe(user, { data: probe.data, error: probe.error });
 }
 
+// ---------------------------------------------------------------------------
+// Login outcome interpretation (login form). Authentication (Supabase Auth)
+// and authorization (app_admins membership) are two separate phases and must
+// never be reported as each other: a membership-probe failure after a
+// successful sign-in is an authorization error, not a wrong password.
+// ---------------------------------------------------------------------------
+
+export type LoginOutcome =
+  | { kind: "auth_failed"; message: string }
+  | { kind: "admin" }
+  | { kind: "not_admin"; message: string }
+  | { kind: "admin_check_failed"; message: string };
+
+// Friendly wording for authorization failures AFTER Supabase Auth succeeded.
+// Deliberately separate from friendlyAuthMessage so a membership/permission
+// problem can never surface as "Incorrect email or password." Pure and
+// tested; never echoes raw server messages.
+export function friendlyAuthorizationMessage(error: unknown): string {
+  const err = (error && typeof error === "object" ? error : {}) as {
+    message?: unknown;
+    code?: unknown;
+  };
+  const message = typeof err.message === "string" ? err.message : "";
+  const lowered = message.toLowerCase();
+
+  if (lowered.includes("not registered as an admin")) {
+    return "Signed in successfully, but this account is not registered as an admin.";
+  }
+  // PostgREST 42501: the role could not even SELECT app_admins — a database
+  // permission problem, not a problem with the person signing in.
+  if (String(err.code ?? "") === "42501" || lowered.includes("permission denied")) {
+    return "Signed in successfully, but the server denied the admin membership check (missing database permission). Contact the site operator.";
+  }
+  if (lowered.includes("fetch") || lowered.includes("network")) {
+    return "Signed in successfully, but the admin check could not be reached. Check your network and try again.";
+  }
+  return "Signed in successfully, but your admin access could not be verified. Please try again.";
+}
+
+// Pure interpretation of one sign-in attempt so it can be unit tested.
+// `authError` is the signInWithPassword error (if any); `probe` is the
+// app_admins membership lookup that runs only after authentication succeeds
+// (null when authentication already failed).
+export function interpretLoginAttempt(
+  authError: unknown,
+  probe: { data: unknown; error: { message?: string; code?: string } | null } | null,
+): LoginOutcome {
+  if (authError) {
+    return { kind: "auth_failed", message: friendlyAuthMessage(authError) };
+  }
+  if (!probe || probe.error) {
+    return {
+      kind: "admin_check_failed",
+      message: friendlyAuthorizationMessage(probe?.error ?? new Error("Admin check unavailable")),
+    };
+  }
+  if (!probe.data) {
+    return {
+      kind: "not_admin",
+      message: friendlyAuthorizationMessage(
+        new Error("This account is not registered as an admin."),
+      ),
+    };
+  }
+  return { kind: "admin" };
+}
+
 // Friendly wording for Supabase Auth failures (login form). Pure and tested.
 export function friendlyAuthMessage(error: unknown): string {
   const message =

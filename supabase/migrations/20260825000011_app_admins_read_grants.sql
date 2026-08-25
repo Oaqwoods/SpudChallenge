@@ -1,0 +1,22 @@
+-- ONE → FIVE — fix: missing read grants on app_admins
+--
+-- Migration 20260812000002 enabled RLS on app_admins and created the
+-- app_admins_read policy for the `authenticated` role, but never granted
+-- SELECT on the table itself. This project does not fall back to default
+-- privileges (the same reason migration 2 carries explicit grants for every
+-- other table), so every PostgREST read of app_admins failed with HTTP 401
+-- (code 42501, "permission denied for table app_admins") — even with a valid
+-- session JWT and an existing membership row.
+--
+-- That 401 broke:
+--   * the admin sign-in membership probe right after signInWithPassword
+--     (a successful password was misreported as a failed sign-in),
+--   * the admin-area session gate,
+--   * the service-role admin check in send-broadcast.
+--
+-- RLS is unchanged and remains the access control:
+--   * authenticated → app_admins_read policy (uuid-only membership list)
+--   * anon          → no policy applies → zero rows
+--   * no write policies exist anywhere; admin rows stay operator-managed.
+-- GRANT is idempotent, so this is safe to run on any environment.
+grant select on public.app_admins to authenticated, service_role;

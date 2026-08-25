@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { friendlyAuthMessage, passwordResetRedirectTo } from "@/lib/admin-auth";
+import {
+  friendlyAuthMessage,
+  friendlyAuthorizationMessage,
+  interpretLoginAttempt,
+  passwordResetRedirectTo,
+} from "@/lib/admin-auth";
 import { getSupabase } from "@/lib/supabase";
 import { Panel } from "@/components/ui";
 
@@ -42,11 +47,14 @@ export function AdminLoginForm() {
         .eq("user_id", session.user.id)
         .maybeSingle();
       if (cancelled) return;
-      if (!probe.error && probe.data) {
+      const outcome = interpretLoginAttempt(null, { data: probe.data, error: probe.error });
+      if (outcome.kind === "admin") {
         window.location.replace("/admin/");
-      } else if (!probe.error) {
+      } else if (outcome.kind === "not_admin") {
         await supabase.auth.signOut();
       }
+      // admin_check_failed: leave the session and the form alone; the user
+      // can retry and will see the authorization error surfaced explicitly.
     })();
     return () => {
       cancelled = true;
@@ -107,34 +115,49 @@ export function AdminLoginForm() {
       return;
     }
 
+    // Phase 1 — authentication (Supabase Auth). Only failures in this phase
+    // are credential errors and reported as such.
     setStatus("submitting");
+    let signedInUserId: string;
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
       });
       if (error) throw error;
-
-      // Signed in — but only registered admins may proceed. Non-admin sessions
-      // are signed out immediately so no session lingers.
-      const probe = await supabase
-        .from("app_admins")
-        .select("user_id")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
-      if (probe.error) {
-        await supabase.auth.signOut();
-        throw new Error("Could not verify your account. Please try again.");
-      }
-      if (!probe.data) {
-        await supabase.auth.signOut();
-        throw new Error("This account is not registered as an admin.");
-      }
-      window.location.replace("/admin/");
+      signedInUserId = data.user.id;
     } catch (err) {
       setStatus("error");
       setMessage(friendlyAuthMessage(err));
       setPassword("");
+      return;
+    }
+
+    // Phase 2 — authorization (app_admins membership). supabase-js stores
+    // the session before signInWithPassword resolves, so this query already
+    // carries the fresh access token. Any failure here happened AFTER a
+    // successful sign-in: the password was correct, so it must never be
+    // reported as an incorrect-password error.
+    try {
+      const probe = await supabase
+        .from("app_admins")
+        .select("user_id")
+        .eq("user_id", signedInUserId)
+        .maybeSingle();
+      const outcome = interpretLoginAttempt(null, { data: probe.data, error: probe.error });
+      if (outcome.kind === "admin") {
+        window.location.replace("/admin/");
+        return;
+      }
+      // Signed in but not authorized: no session lingers, and the
+      // authorization problem is surfaced with its own wording.
+      await supabase.auth.signOut().catch(() => undefined);
+      setStatus("error");
+      setMessage(outcome.message);
+    } catch (err) {
+      await supabase.auth.signOut().catch(() => undefined);
+      setStatus("error");
+      setMessage(friendlyAuthorizationMessage(err));
     }
   };
 
