@@ -137,6 +137,75 @@ export function tradeValuesChanged(original: AdminTradeRow, draft: TradeEditDraf
   );
 }
 
+// Private verification documents (prompt 29 / spec §8.6): signed receipts,
+// agreements, professional verification added by an admin after publication.
+// Stored in the private trade-documents bucket, referenced by trade_documents
+// rows, never exposed through any public view.
+
+export const DOCUMENT_TYPES = [
+  "signed_receipt",
+  "agreement",
+  "professional_verification",
+  "other",
+] as const;
+
+export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+
+export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+  signed_receipt: "Signed receipt",
+  agreement: "Agreement",
+  professional_verification: "Professional verification",
+  other: "Other",
+};
+
+// Images + PDF only; 10 MB matches the bucket-level file_size_limit.
+export const ACCEPTED_DOCUMENT_MIME: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "application/pdf": "pdf",
+};
+
+export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+
+export function documentExtensionFor(mime: unknown): string | null {
+  if (typeof mime !== "string") return null;
+  return ACCEPTED_DOCUMENT_MIME[mime.toLowerCase()] ?? null;
+}
+
+// Returns the first problem found, or null when the file may be uploaded.
+export function validateDocumentFile(fileType: string, sizeBytes: number): string | null {
+  if (documentExtensionFor(fileType) === null) {
+    return "Only JPG, PNG, WebP or PDF files are accepted.";
+  }
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return "The file is empty.";
+  if (sizeBytes > MAX_DOCUMENT_BYTES) return "Each document must be 10 MB or smaller.";
+  return null;
+}
+
+export interface AdminTradeDocument {
+  id: string;
+  trade_id: string;
+  storage_path: string;
+  document_type: string;
+  created_at: string;
+}
+
+export function toAdminTradeDocument(row: Record<string, unknown>): AdminTradeDocument | null {
+  const id = toStr(row.id);
+  const tradeId = toStr(row.trade_id);
+  const storagePath = toStr(row.storage_path);
+  const documentType = toStr(row.document_type);
+  if (!id || !tradeId || !storagePath || !documentType) return null;
+  return {
+    id,
+    trade_id: tradeId,
+    storage_path: storagePath,
+    document_type: documentType,
+    created_at: toStr(row.created_at) ?? "",
+  };
+}
+
 // Returns the first problem found, or null when the edit can be saved.
 export function validateTradeEdit(original: AdminTradeRow, draft: TradeEditDraft): string | null {
   if (!draft.outgoingItem.trim()) return "Enter the item given away.";

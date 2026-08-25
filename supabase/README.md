@@ -19,6 +19,7 @@ exception).
 | `20260825000011_app_admins_read_grants.sql` | Grants `SELECT` on `app_admins` to `authenticated` + `service_role` — the membership-probe target that migration 2 gave an RLS policy but no table grant, so every probe 401'd (code 42501) even for valid admin sessions. RLS unchanged, no write policies added |
 | `20260825000012_trade_safety.sql` | Admin safety + recovery (playbook PROMPT 27): idempotent `publish_trade` replay (a retried/double publish returns the existing trade instead of failing or duplicating), `update_published_trade(...)` RPC for safe correction of published trades (server-enforced confirmation for historical value changes, frozen BTC FMV lock, homepage re-sync in the same transaction), and the no-hard-delete lockdown (drops `admin_delete` policies + revokes `DELETE` on `offers`, `followers`, `trades` and `email_broadcast_recipients` from `authenticated`) |
 | `20260825000013_upload_size_limits.sql` | Volume/upload hardening (playbook PROMPT 28): sets the Supabase Storage bucket-level `file_size_limit` to 10 MB on `offer-uploads` and `trade-media`, so the cap is enforced by Storage itself rather than only against the client-declared size at upload-URL issuance. Degrades to a notice on storage schemas without the column |
+| `20260825000014_trade_documents_storage.sql` | Valuation recordkeeping (playbook PROMPT 29 / spec §8.6): private `trade-documents` storage bucket for admin-added verification documents (signed receipts, agreements, professional verification) referenced by the existing `trade_documents` table — admin-only storage policies, 10 MB bucket cap, no anon access, never exposed through any public view |
 
 ## Applying the migrations
 
@@ -29,7 +30,7 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-**Option B — Dashboard SQL Editor:** paste and run the thirteen files in
+**Option B — Dashboard SQL Editor:** paste and run the fourteen files in
 timestamp order, one at a time.
 
 ## Access model (RLS)

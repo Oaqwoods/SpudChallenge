@@ -15,17 +15,27 @@ import { formatDateTime } from "@/lib/time";
 import { toSettings } from "@/lib/challenge";
 import { MAX_PUBLIC_IMAGES } from "@/lib/publish-trade";
 import {
+  DOCUMENT_TYPES,
+  DOCUMENT_TYPE_LABELS,
+  documentExtensionFor,
   toAdminTrade,
+  toAdminTradeDocument,
   toAdminTradeMedia,
   tradeValuesChanged,
+  validateDocumentFile,
   validateTradeEdit,
+  type AdminTradeDocument,
   type AdminTradeMedia,
   type AdminTradeRow,
+  type DocumentType,
 } from "@/lib/admin-trades";
 import { Panel } from "@/components/ui";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const DOCUMENT_BUCKET = "trade-documents";
+// Matches the admin offer-photo pattern: short-lived signed URLs only.
+const SIGNED_URL_TTL_SECONDS = 900;
 
 const inputClass =
   "w-full border-[3px] border-edge bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-60";
@@ -38,6 +48,9 @@ interface MediaItem {
   previewUrl: string;
   status: "existing" | "uploading" | "uploaded" | "error";
 }
+
+// A trade_documents row plus a short-lived signed URL for admin viewing.
+type DocumentItem = AdminTradeDocument & { signedUrl: string | null };
 
 type FormState =
   | { phase: "loading" }
@@ -88,6 +101,37 @@ async function fetchTradeMedia(tradeId: string): Promise<AdminTradeMedia[]> {
     .filter((m): m is AdminTradeMedia => m !== null);
 }
 
+// Private verification documents (prompt 29 / spec §8.6). Rows come from
+// trade_documents; viewing uses fresh signed URLs against the private
+// trade-documents bucket — nothing here is ever public.
+async function fetchTradeDocuments(tradeId: string): Promise<DocumentItem[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("trade_documents")
+    .select("*")
+    .eq("trade_id", tradeId)
+    .order("created_at", { ascending: true });
+  if (error) return [];
+  const docs = ((data ?? []) as unknown as Record<string, unknown>[])
+    .map(toAdminTradeDocument)
+    .filter((d): d is AdminTradeDocument => d !== null);
+  if (docs.length === 0) return [];
+  const { data: signed } = await supabase.storage
+    .from(DOCUMENT_BUCKET)
+    .createSignedUrls(
+      docs.map((d) => d.storage_path),
+      SIGNED_URL_TTL_SECONDS,
+    );
+  const byPath = new Map(
+    ((signed ?? []) as Array<{ path: string; signedUrl?: string }>).map((entry) => [
+      entry.path,
+      entry.signedUrl ?? null,
+    ]),
+  );
+  return docs.map((d) => ({ ...d, signedUrl: byPath.get(d.storage_path) ?? null }));
+}
+
 export function TradeEditForm({ tradeId }: { tradeId: string }) {
   const [state, setState] = useState<FormState>({ phase: "loading" });
 
@@ -105,6 +149,12 @@ export function TradeEditForm({ tradeId }: { tradeId: string }) {
   const [publicityConfirmed, setPublicityConfirmed] = useState(false);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [photoNotice, setPhotoNotice] = useState("");
+
+  // Private verification documents (prompt 29) — never published.
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [docType, setDocType] = useState<DocumentType>("signed_receipt");
+  const [docBusy, setDocBusy] = useState(false);
+  const [docNotice, setDocNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   const [confirmValueChange, setConfirmValueChange] = useState(false);
   const [message, setMessage] = useState("");
@@ -130,6 +180,7 @@ export function TradeEditForm({ tradeId }: { tradeId: string }) {
       setParticipantName(trade.public_participant_name ?? "");
       setPublicityConfirmed(trade.publicity_release_confirmed);
       const existing = await fetchTradeMedia(tradeId);
+      const docs = await fetchTradeDocuments(tradeId);
       if (!cancelled) {
         setMedia(
           existing.map((m) => ({
@@ -140,6 +191,7 @@ export function TradeEditForm({ tradeId }: { tradeId: string }) {
             status: "existing" as const,
           })),
         );
+        setDocuments(docs);
       }
     };
     void initialLoad();
@@ -203,6 +255,64 @@ export function TradeEditForm({ tradeId }: { tradeId: string }) {
       if (target && target.status !== "existing") URL.revokeObjectURL(target.previewUrl);
       return prev.filter((m) => m.key !== key);
     });
+  };
+
+  const addDocument = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setDocNotice(null);
+    const problem = validateDocumentFile(file.type, file.size);
+    if (problem) {
+      setDocNotice({ tone: "error", text: problem });
+      return;
+    }
+    const supabase = getSupabase();
+    if (!supabase) return;
+    setDocBusy(true);
+    const ext = documentExtensionFor(file.type) ?? "bin";
+    const path = `${tradeId}/${crypto.randomUUID()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from(DOCUMENT_BUCKET)
+      .upload(path, file, { contentType: file.type });
+    if (uploadError) {
+      setDocBusy(false);
+      setDocNotice({ tone: "error", text: `Upload failed — ${uploadError.message}` });
+      return;
+    }
+    const { error: insertError } = await supabase.from("trade_documents").insert({
+      trade_id: tradeId,
+      storage_path: path,
+      document_type: docType,
+    });
+    if (insertError) {
+      // Roll back the orphaned object best-effort.
+      await supabase.storage.from(DOCUMENT_BUCKET).remove([path]);
+      setDocBusy(false);
+      setDocNotice({ tone: "error", text: `Could not attach the document (${insertError.message}).` });
+      return;
+    }
+    setDocuments(await fetchTradeDocuments(tradeId));
+    setDocBusy(false);
+    setDocNotice({ tone: "ok", text: "Document attached (private — never published)." });
+  };
+
+  const removeDocument = async (doc: DocumentItem) => {
+    const supabase = getSupabase();
+    if (!supabase || docBusy) return;
+    setDocBusy(true);
+    setDocNotice(null);
+    const { error } = await supabase.from("trade_documents").delete().eq("id", doc.id);
+    if (error) {
+      setDocBusy(false);
+      setDocNotice({ tone: "error", text: `Could not remove the document (${error.message}).` });
+      return;
+    }
+    // Best-effort orphan cleanup — the reference is already gone.
+    await supabase.storage.from(DOCUMENT_BUCKET).remove([doc.storage_path]);
+    setDocuments(await fetchTradeDocuments(tradeId));
+    setDocBusy(false);
+    setDocNotice({ tone: "ok", text: "Document removed." });
   };
 
   if (state.phase === "loading") {
@@ -381,13 +491,23 @@ export function TradeEditForm({ tradeId }: { tradeId: string }) {
           ) : null}
         </div>
         {isBtcTrade ? (
-          <p className="mt-3 text-xs leading-relaxed text-faded">
-            BTC trade: {trade.btc_amount} BTC · frozen USD fair-market value{" "}
-            {trade.btc_usd_value !== null ? formatUsd(trade.btc_usd_value) : "—"}
-            {trade.btc_valuation_source ? ` · ${trade.btc_valuation_source}` : ""}. The frozen
-            value is tax/recordkeeping data and cannot be edited here; text
-            and photos remain editable.
-          </p>
+          <>
+            <p className="mt-3 text-xs leading-relaxed text-faded">
+              BTC trade: {trade.btc_amount} BTC · frozen USD fair-market value{" "}
+              {trade.btc_usd_value !== null ? formatUsd(trade.btc_usd_value) : "—"}
+              {trade.btc_valued_at ? ` · valued ${formatDateTime(trade.btc_valued_at)}` : ""}
+              {trade.btc_valuation_source ? ` · ${trade.btc_valuation_source}` : ""}. The frozen
+              value is tax/recordkeeping data and cannot be edited here; text
+              and photos remain editable.
+            </p>
+            {trade.btc_wallet_address || trade.btc_transaction_id ? (
+              <p className="mt-2 text-xs leading-relaxed text-faded">
+                Private recordkeeping (admins only, never public):
+                {trade.btc_wallet_address ? ` wallet address ${trade.btc_wallet_address}` : ""}
+                {trade.btc_transaction_id ? ` · transaction ${trade.btc_transaction_id}` : ""}
+              </p>
+            ) : null}
+          </>
         ) : null}
       </Panel>
 
@@ -478,6 +598,105 @@ export function TradeEditForm({ tradeId }: { tradeId: string }) {
             ) : null}
           </div>
         </div>
+      </Panel>
+
+      <Panel className="border-alert p-4">
+        <p className="font-display text-[9px] uppercase text-alert">
+          Private verification documents — never published
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-faded">
+          Signed receipts, agreements, or professional verification added after
+          publication (spec §8.6). JPG / PNG / WebP / PDF, ≤ 10 MB each. Admins
+          view them through short-lived signed links; they never appear publicly.
+        </p>
+
+        {documents.length === 0 ? (
+          <p className="mt-3 text-sm text-faded">No documents attached yet.</p>
+        ) : (
+          <ul className="mt-3 flex flex-col gap-2">
+            {documents.map((doc) => (
+              <li
+                key={doc.id}
+                className="flex flex-wrap items-center justify-between gap-3 border-[3px] border-edge px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm text-foreground">
+                    {DOCUMENT_TYPE_LABELS[doc.document_type as DocumentType] ?? doc.document_type}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-faded">
+                    {doc.storage_path.split("/").pop() ?? doc.storage_path}
+                    {doc.created_at ? ` · ${formatDateTime(doc.created_at)}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {doc.signedUrl ? (
+                    <a
+                      href={doc.signedUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="border-2 border-edge px-2 py-1 font-display text-[7px] uppercase tracking-wider text-faded transition-colors hover:border-accent hover:text-accent sm:text-[8px]"
+                    >
+                      View
+                    </a>
+                  ) : (
+                    <span className="text-[11px] text-faded">Link unavailable</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void removeDocument(doc)}
+                    disabled={docBusy}
+                    className="border-2 border-edge px-2 py-1 font-display text-[7px] uppercase tracking-wider text-alert transition-colors hover:border-alert disabled:cursor-not-allowed disabled:opacity-50 sm:text-[8px]"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,220px)_1fr_auto]">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="document-type" className={labelClass}>
+              Document type
+            </label>
+            <select
+              id="document-type"
+              className={inputClass}
+              value={docType}
+              onChange={(e) => setDocType(e.target.value as DocumentType)}
+            >
+              {DOCUMENT_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {DOCUMENT_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="document-file" className={labelClass}>
+              File
+            </label>
+            <input
+              id="document-file"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              disabled={docBusy}
+              onChange={(e) => void addDocument(e)}
+              className="w-full border-[3px] border-edge bg-background px-3 py-1.5 text-xs text-foreground outline-none file:mr-3 file:border-0 file:bg-accent file:px-3 file:py-1.5 file:font-display file:text-[9px] file:uppercase file:tracking-wider file:text-black disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </div>
+        </div>
+
+        {docNotice ? (
+          <p
+            role={docNotice.tone === "error" ? "alert" : "status"}
+            className={`mt-3 text-sm ${docNotice.tone === "error" ? "text-alert" : "text-mint"}`}
+          >
+            {docNotice.text}
+          </p>
+        ) : null}
+        {docBusy ? <p className="mt-2 text-xs text-faded">Working…</p> : null}
       </Panel>
 
       <Panel className="p-4">

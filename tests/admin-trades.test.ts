@@ -1,9 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  ACCEPTED_DOCUMENT_MIME,
+  DOCUMENT_TYPES,
+  DOCUMENT_TYPE_LABELS,
+  documentExtensionFor,
+  MAX_DOCUMENT_BYTES,
   toAdminTrade,
+  toAdminTradeDocument,
   toAdminTradeMedia,
   tradeValuesChanged,
+  validateDocumentFile,
   validateTradeEdit,
   type AdminTradeRow,
   type TradeEditDraft,
@@ -160,4 +167,49 @@ test("validateTradeEdit freezes historical values on BTC trades", () => {
   assert.match(String(validateTradeEdit(btcTrade, valueChange)), /frozen usd fair-market value/i);
   // Text-only edits on a BTC trade remain allowed.
   assert.equal(validateTradeEdit(btcTrade, draft({ publicStory: "typo fixed" })), null);
+});
+
+test("document types carry stable labels", () => {
+  assert.ok(DOCUMENT_TYPES.length >= 3);
+  for (const t of DOCUMENT_TYPES) {
+    assert.ok(DOCUMENT_TYPE_LABELS[t].length > 0, `label for ${t}`);
+  }
+});
+
+test("documentExtensionFor enforces the images + PDF allowlist", () => {
+  assert.equal(documentExtensionFor("image/jpeg"), "jpg");
+  assert.equal(documentExtensionFor("IMAGE/PNG"), "png", "case-insensitive");
+  assert.equal(documentExtensionFor("image/webp"), "webp");
+  assert.equal(documentExtensionFor("application/pdf"), "pdf");
+  assert.equal(documentExtensionFor("text/html"), null);
+  assert.equal(documentExtensionFor("application/x-msdownload"), null);
+  assert.equal(documentExtensionFor(null), null);
+  assert.equal(Object.keys(ACCEPTED_DOCUMENT_MIME).length, 4);
+});
+
+test("validateDocumentFile rejects wrong types, empty and oversized files", () => {
+  assert.equal(validateDocumentFile("application/pdf", 1024), null);
+  assert.equal(validateDocumentFile("image/jpeg", MAX_DOCUMENT_BYTES), null, "cap is inclusive");
+  assert.match(String(validateDocumentFile("text/plain", 1024)), /only jpg, png, webp or pdf/i);
+  assert.match(String(validateDocumentFile("application/pdf", 0)), /empty/i);
+  assert.match(String(validateDocumentFile("application/pdf", Number.NaN)), /empty/i);
+  assert.match(String(validateDocumentFile("application/pdf", MAX_DOCUMENT_BYTES + 1)), /10 mb/i);
+});
+
+test("toAdminTradeDocument validates rows", () => {
+  assert.equal(toAdminTradeDocument({ id: "d", trade_id: "t" }), null);
+  const doc = toAdminTradeDocument({
+    id: "d",
+    trade_id: "t",
+    storage_path: "t/x.pdf",
+    document_type: "signed_receipt",
+    created_at: "2026-08-25T10:00:00.000Z",
+  });
+  assert.deepEqual(doc, {
+    id: "d",
+    trade_id: "t",
+    storage_path: "t/x.pdf",
+    document_type: "signed_receipt",
+    created_at: "2026-08-25T10:00:00.000Z",
+  });
 });

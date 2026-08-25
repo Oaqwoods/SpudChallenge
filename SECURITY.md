@@ -2,8 +2,8 @@
 
 Scope: focused MVP security review (playbook prompt 15). The goal is a
 defensible small-audience deployment, not enterprise hardening. Last review:
-2026-08-20; prompt-27 admin-safety and prompt-28 volume/upload-hardening
-follow-ups 2026-08-25.
+2026-08-20; prompt-27 admin-safety, prompt-28 volume/upload-hardening and
+prompt-29 valuation/verification-documents follow-ups 2026-08-25.
 
 ## Protections implemented
 
@@ -62,6 +62,13 @@ follow-ups 2026-08-25.
 - **Idempotent publish.** A retried or double `publish_trade` call cannot
   create a second trade or report failure: once the source offer is
   `completed`, the RPC returns the existing trade for that offer.
+- **Private verification documents (prompt 29 / spec §8.6).** Signed
+  receipts, agreements and professional verification documents attach to a
+  trade via the admin edit screen into the **private `trade-documents`
+  bucket** (`20260825000014`): admin-only storage policies, 10 MB bucket
+  cap, images + PDF only client-side, no anon access, and no public view
+  references `trade_documents`. Admins view documents only through
+  short-lived (15 min) signed URLs.
 
 ### Input handling
 
@@ -123,6 +130,15 @@ follow-ups 2026-08-25.
   only. Raw error objects are never logged because PostgREST `details` can
   carry user data (e.g. a duplicate-key DETAIL contains the conflicting
   email), and no client/component code logs to the console at all.
+- **Valuation & publicity privacy defaults (prompt 29).** Trader identity is
+  private by default — a participant name is stored only with the recorded
+  publicity-release flag (enforced by a DB constraint and both publishing
+  RPCs). Only *general* locations are ever published; exact meetup
+  logistics live in private notes. `valuation_evidence`, BTC
+  wallet/transaction ids, private completion notes and verification
+  documents are excluded from every public view; public pages render
+  "Verified" only when `valuation_status = 'verified'`, and the scoreboard
+  reads the final challenge value written atomically at publish.
 - **Admin CSV exports stay in the admin session (prompt 27).** The offers,
   followers/preferences and trades exports are generated entirely in the
   signed-in admin's browser from rows RLS already authorizes that session to

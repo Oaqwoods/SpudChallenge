@@ -55,6 +55,10 @@ Function items marked **[deploy]**.
      use **Did Not Complete** and record the reason. Nothing public changes
      (item, value and trade count stay put) and the other shortlisted
      offers remain available to select.
+   - **Paperwork:** after the transfer, attach the signed receipt/agreement
+     or any professional verification under **Admin → Trades → Edit →
+     Private verification documents** (private bucket, never published —
+     keep these, they are the valuation/tax recordkeeping trail).
 5. **Send the trade email** — `/admin/emails/`, preview the draft, then
    send with the two-step confirmation. Only opted-in, non-unsubscribed
    followers receive it; retries never double-send.
