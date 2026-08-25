@@ -17,6 +17,7 @@ exception).
 | `20260821000009_seed_initial_challenge.sql` | PROMPT 19 safe seed guard: inserts the canonical prelaunch row if missing, never overwrites an existing admin-owned row, leaves `start_at`/`end_at` NULL and verifies the effective initial state |
 | `20260823000010_offer_transition_guard.sql` | Offer state-machine trigger: rejects any status UPDATE outside the allowed transition matrix, stamps `meetup_scheduled_at` when a meetup is scheduled (playbook PROMPT 25 / spec §25) |
 | `20260825000011_app_admins_read_grants.sql` | Grants `SELECT` on `app_admins` to `authenticated` + `service_role` — the membership-probe target that migration 2 gave an RLS policy but no table grant, so every probe 401'd (code 42501) even for valid admin sessions. RLS unchanged, no write policies added |
+| `20260825000012_trade_safety.sql` | Admin safety + recovery (playbook PROMPT 27): idempotent `publish_trade` replay (a retried/double publish returns the existing trade instead of failing or duplicating), `update_published_trade(...)` RPC for safe correction of published trades (server-enforced confirmation for historical value changes, frozen BTC FMV lock, homepage re-sync in the same transaction), and the no-hard-delete lockdown (drops `admin_delete` policies + revokes `DELETE` on `offers`, `followers`, `trades` and `email_broadcast_recipients` from `authenticated`) |
 
 ## Applying the migrations
 
@@ -27,7 +28,7 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-**Option B — Dashboard SQL Editor:** paste and run the eleven files in
+**Option B — Dashboard SQL Editor:** paste and run the twelve files in
 timestamp order, one at a time.
 
 ## Access model (RLS)
@@ -36,7 +37,13 @@ timestamp order, one at a time.
   (`public_trades`, `public_trade_media`, `public_challenge_settings`,
   `public_follower_wall`, `public_follower_count`).
 - `authenticated` non-admin → denied on everything.
-- `authenticated` admin (uuid listed in `app_admins`) → full access.
+- `authenticated` admin (uuid listed in `app_admins`) → select/insert/update
+  on all tables, **except `DELETE`, which is revoked** on `offers`,
+  `followers`, `trades` and `email_broadcast_recipients` (prompt 27: no
+  normal hard deletes — records are archived by status/timestamp, corrected
+  via `update_published_trade`, never removed). `trade_media` keeps DELETE
+  because photo-set replacement rewrites media rows; sensitive mutations go
+  through the narrowly scoped RPCs regardless.
 - `service_role` → bypasses RLS; used only inside Supabase Edge Functions.
 - There are no public INSERT policies: offers and email preferences are
   written by Edge Functions with the service role.

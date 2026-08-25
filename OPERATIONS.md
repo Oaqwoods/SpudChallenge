@@ -80,8 +80,12 @@ Function items marked **[deploy]**.
 2. Final stats render automatically: final value, multiplier, trade count,
    goal verdict. Offer and follower forms close themselves.
 3. Send a final wrap-up broadcast from `/admin/emails/` if you want one.
-4. Legal/recordkeeping: export or archive offers, followers, and trades
-   (CSV tooling is a post-Day-21 item — Supabase Studio exports work).
+4. Legal/recordkeeping: export the records with the built-in admin CSV
+   buttons — **Export offers CSV** on the dashboard, **Export followers CSV**
+   on the Followers page, **Export trades CSV** on the Trades page. Each
+   downloads a dated `.csv` (private columns included — contact data, admin
+   notes, BTC verification fields) generated entirely in your browser; store
+   the files somewhere safe.
 5. Attorney review of Terms/Privacy placeholders before relying on them.
 
 ## Emergency contacts & rollbacks
@@ -94,7 +98,12 @@ Function items marked **[deploy]**.
   → Password recovery.
 - Broken deploy: Actions → rerun the last good workflow, or push a revert
   commit. Static hosting means the previous build is never lost.
-- Bad publish: correct the trade via the DB (a safe admin edit screen is
-  planned, playbook prompt 27) — published trades are never hard-deleted.
+- Bad publish: open **Admin → Trades → Edit** on the published trade and
+  correct the typo/photo/story there. Saving a historical **value** change
+  requires checking an explicit confirmation box first, BTC trades keep
+  their frozen USD fair-market value locked, and editing the latest trade
+  re-syncs the homepage current item automatically. Published trades are
+  never hard-deleted — row deletion on offers/followers/trades is disabled
+  at the database level.
 - Email problems: check Edge Function logs in Supabase → Logs; the
   broadcast screen shows per-recipient send failures and supports retry.

@@ -343,7 +343,7 @@ function BroadcastDetail({ broadcastId }: { broadcastId: string }) {
   const [sendStep, setSendStep] = useState<"idle" | "confirm" | "sending">("idle");
   const [sendConfirmed, setSendConfirmed] = useState(false);
   const [sendResult, setSendResult] = useState<SendResult | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -424,7 +424,7 @@ function BroadcastDetail({ broadcastId }: { broadcastId: string }) {
     if (!editable || saving) return;
     setNotice(null);
     if (!subject.trim() || !bodyHtml.trim()) {
-      setNotice("Subject and body are both required.");
+      setNotice({ tone: "error", text: "Subject and body are both required." });
       return;
     }
     const supabase = getSupabase();
@@ -436,10 +436,10 @@ function BroadcastDetail({ broadcastId }: { broadcastId: string }) {
       .eq("id", broadcast.id);
     setSaving(false);
     if (error) {
-      setNotice(`Could not save the draft (${error.message}).`);
+      setNotice({ tone: "error", text: `Could not save the draft (${error.message}).` });
       return;
     }
-    setNotice("Draft saved.");
+    setNotice({ tone: "ok", text: "Draft saved." });
   };
 
   const resetToDraft = async () => {
@@ -455,10 +455,14 @@ function BroadcastDetail({ broadcastId }: { broadcastId: string }) {
       .eq("status", "failed");
     setSaving(false);
     if (error) {
-      setNotice(`Could not reset the broadcast (${error.message}).`);
+      setNotice({ tone: "error", text: `Could not reset the broadcast (${error.message}).` });
       return;
     }
     await reload();
+    setNotice({
+      tone: "ok",
+      text: "Broadcast reset to draft — already-delivered addresses stay skipped, only unsent addresses go out on retry.",
+    });
   };
 
   const send = async () => {
@@ -477,7 +481,10 @@ function BroadcastDetail({ broadcastId }: { broadcastId: string }) {
       });
       await reload();
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Sending failed. Please try again.");
+      setNotice({
+        tone: "error",
+        text: err instanceof Error ? err.message : "Sending failed. Please try again.",
+      });
     } finally {
       setSendStep("idle");
       setSendConfirmed(false);
@@ -539,8 +546,13 @@ function BroadcastDetail({ broadcastId }: { broadcastId: string }) {
       </div>
 
       {notice ? (
-        <p role="alert" className="mt-4 border-[3px] border-alert px-3 py-2 text-sm text-alert">
-          {notice}
+        <p
+          role={notice.tone === "error" ? "alert" : "status"}
+          className={`mt-4 border-[3px] px-3 py-2 text-sm ${
+            notice.tone === "error" ? "border-alert text-alert" : "border-mint text-mint"
+          }`}
+        >
+          {notice.text}
         </p>
       ) : null}
 

@@ -146,3 +146,51 @@ accepted operational risk.
    `trade_number` and still writes trades + media + settings + offer status
    + draft broadcast in one function.
 4. Confirm `lib/fetch-challenge.ts` reads only `public_*` views.
+
+---
+
+## Addendum — PROMPT 27 admin safety + recovery (2026-08-25)
+
+This addendum records how the two residual risks above that prompt 24
+deferred to prompt 27 were closed, plus the verification runs for the
+prompt-27 changes. Point-in-time as of 2026-08-25.
+
+### Residual risk #1 — no in-app correction path for a published trade → CLOSED
+
+- A safe edit screen now exists at `/admin/trades/edit/?id=<uuid>`, reached
+  from the new trades list (`/admin/trades/`). All writes go through
+  `update_published_trade(...)`
+  (`supabase/migrations/20260825000012_trade_safety.sql`), which is
+  `SECURITY INVOKER` + `is_admin()` gated, locks the trade row, re-checks
+  publicity consent, and writes trade + media + (when the trade is current)
+  `challenge_settings` in a single transaction.
+- Historical value changes require an explicit confirmation flag both in the
+  UI (a checkbox that gates the Save button) and server-side (the RPC raises
+  if values change without `p_confirm_value_change`). BTC trades hold a
+  frozen USD fair-market value and reject value edits entirely.
+- "Idempotent publish" is also in place: a retried `publish_trade` on an
+  already-`completed` offer returns the existing trade instead of failing or
+  duplicating.
+
+### Residual risk #4 — no pagination on the admin lists → CLOSED (admin)
+
+- The admin offer and follower lists now fetch every row page by page
+  (`fetchAllRows` in `lib/admin-export`, mirroring send-broadcast) instead of
+  a silent `.limit(500)`/`.limit(200)` cap, and render page by page
+  (`lib/pagination`, `LIST_PAGE_SIZE = 25`). The new trades list is paginated
+  the same way. Public trade rendering remains unbounded by design (21-day
+  challenge) and is unchanged.
+- Additionally, prompt 27's "no normal hard deletes" is now enforced at the
+  database layer: `DELETE` on `offers`, `followers`, `trades` and
+  `email_broadcast_recipients` is revoked from `authenticated` and the
+  `admin_delete` policies dropped. `trade_media` keeps DELETE for photo-set
+  replacement.
+
+### Verification runs (2026-08-25)
+
+| Check | Result |
+| --- | --- |
+| `npm test` (unit suite incl. new `admin-trades`, `pagination`, extended `admin-export`) | 137/137 pass |
+| `npm run lint` | clean |
+| `npx tsc --noEmit` | clean |
+| `npm run build` (static export, incl. new `/admin/trades` and `/admin/trades/edit`) | clean, 21/21 static pages |

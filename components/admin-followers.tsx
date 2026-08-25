@@ -10,6 +10,9 @@ import Link from "next/link";
 import { Panel } from "@/components/ui";
 import { getSupabase } from "@/lib/supabase";
 import { formatDateTime } from "@/lib/time";
+import { fetchAllRows, type PaginatedClient } from "@/lib/admin-export";
+import { LIST_PAGE_SIZE, pageSlice, pageSummary } from "@/lib/pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import {
   countGroups,
   filterFollowers,
@@ -49,30 +52,31 @@ type LoadState =
   | { phase: "ready"; followers: AdminFollowerRow[] };
 
 // Fetch-only (no setState): the caller awaits this and applies the result.
+// Followers are fetched page by page (no silent .limit() cap) so the list
+// can never hide rows; the render itself is paginated below (prompt 27).
 async function fetchFollowers(): Promise<LoadState> {
   const supabase = getSupabase();
   if (!supabase) return { phase: "unconfigured" };
-  const { data, error } = await supabase
-    .from("followers")
-    .select(FOLLOWER_COLUMNS)
-    .order("created_at", { ascending: false })
-    .limit(500);
+  const client = supabase as unknown as PaginatedClient;
+  const { rows, error } = await fetchAllRows(client, "followers", "created_at", FOLLOWER_COLUMNS);
   if (error) {
     return {
       phase: "error",
-      message: `Could not load followers (${error.message}). Check your session and try again.`,
+      message: `Could not load followers (${error}). Check your session and try again.`,
     };
   }
-  const raw = (data ?? []) as unknown as Record<string, unknown>[];
-  const followers = raw
+  const followers = rows
     .map(toAdminFollower)
-    .filter((f): f is AdminFollowerRow => f !== null);
+    .filter((f): f is AdminFollowerRow => f !== null)
+    // Fetch order is ascending; the admin list shows newest first.
+    .reverse();
   return { phase: "ready", followers };
 }
 
 export function AdminFollowers() {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [group, setGroup] = useState<FollowerGroup>("all");
+  const [page, setPage] = useState(1);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
@@ -162,6 +166,9 @@ export function AdminFollowers() {
   const { followers } = state;
   const counts = countGroups(followers);
   const visible = filterFollowers(followers, group);
+  const totalPages = Math.max(1, Math.ceil(visible.length / LIST_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = pageSlice(visible, safePage, LIST_PAGE_SIZE);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
@@ -193,24 +200,30 @@ export function AdminFollowers() {
       </div>
 
       <section aria-label="Follower list" className="mt-8">
-        <div className="grid gap-3 sm:max-w-xs">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="follower-group-filter" className={labelClass}>
-              Group
-            </label>
-            <select
-              id="follower-group-filter"
-              className={inputClass}
-              value={group}
-              onChange={(e) => setGroup(e.target.value as FollowerGroup)}
-            >
-              {FOLLOWER_GROUPS.map((g) => (
-                <option key={g} value={g}>
-                  {FOLLOWER_GROUP_LABELS[g]} ({counts[g]})
-                </option>
-              ))}
-            </select>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="grid gap-3 sm:max-w-xs">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="follower-group-filter" className={labelClass}>
+                Group
+              </label>
+              <select
+                id="follower-group-filter"
+                className={inputClass}
+                value={group}
+                onChange={(e) => {
+                  setGroup(e.target.value as FollowerGroup);
+                  setPage(1);
+                }}
+              >
+                {FOLLOWER_GROUPS.map((g) => (
+                  <option key={g} value={g}>
+                    {FOLLOWER_GROUP_LABELS[g]} ({counts[g]})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+          <ExportCsvButton kind="followers" />
         </div>
 
         {notice ? (
@@ -245,7 +258,7 @@ export function AdminFollowers() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((f) => (
+                {paged.map((f) => (
                   <FollowerRow
                     key={f.id}
                     follower={f}
@@ -257,6 +270,35 @@ export function AdminFollowers() {
             </table>
           </Panel>
         )}
+
+        {visible.length > LIST_PAGE_SIZE ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-faded">
+              {pageSummary(visible.length, safePage, LIST_PAGE_SIZE)}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="border-[3px] border-edge px-3 py-1.5 font-display text-[9px] uppercase tracking-wider text-faded transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50 sm:text-[10px]"
+                disabled={safePage <= 1}
+                onClick={() => setPage(safePage - 1)}
+              >
+                ← Prev
+              </button>
+              <span className="text-xs text-faded">
+                Page {safePage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="border-[3px] border-edge px-3 py-1.5 font-display text-[9px] uppercase tracking-wider text-faded transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50 sm:text-[10px]"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage(safePage + 1)}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <p className="mt-3 text-xs leading-relaxed text-faded">
           Emails are shown here for identification only — the public wall

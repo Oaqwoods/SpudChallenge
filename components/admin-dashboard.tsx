@@ -17,6 +17,9 @@ import {
 import { formatUsd } from "@/lib/format";
 import { formatDateTime, padTwo, splitDuration } from "@/lib/time";
 import { getSupabase } from "@/lib/supabase";
+import { fetchAllRows, type PaginatedClient } from "@/lib/admin-export";
+import { LIST_PAGE_SIZE, pageSlice, pageSummary } from "@/lib/pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import {
   OFFER_SORT_LABELS,
   OFFER_STATUSES,
@@ -129,20 +132,19 @@ function Stat({ label, value, tone = "text-accent" }: { label: string; value: st
 async function fetchDashboardState(): Promise<LoadState> {
   const supabase = getSupabase();
   if (!supabase) return { phase: "unconfigured" };
+  const client = supabase as unknown as PaginatedClient;
+  // Offers are fetched page by page (no silent .limit() cap) so the list can
+  // never hide rows; the render itself is paginated below (prompt 27).
   const [settingsRes, offersRes, followerRes] = await Promise.all([
     supabase.from("challenge_settings").select("*").eq("id", 1).maybeSingle(),
-    supabase
-      .from("offers")
-      .select(OFFER_COLUMNS)
-      .order("created_at", { ascending: false })
-      .limit(500),
+    fetchAllRows(client, "offers", "created_at", OFFER_COLUMNS),
     supabase.from("public_follower_count").select("follower_count").maybeSingle(),
   ]);
-  const error = settingsRes.error ?? offersRes.error ?? followerRes.error;
-  if (error) {
+  const error = settingsRes.error ?? followerRes.error;
+  if (error || offersRes.error) {
     return {
       phase: "error",
-      message: `Could not load the dashboard (${error.message}). Check your session and try again.`,
+      message: `Could not load the dashboard (${error?.message ?? offersRes.error}). Check your session and try again.`,
     };
   }
   const settings = settingsRes.data
@@ -150,7 +152,7 @@ async function fetchDashboardState(): Promise<LoadState> {
     : DEFAULT_SETTINGS;
   // Column list is dynamic, so supabase-js cannot type the rows; they are
   // validated field-by-field by toAdminOffer below.
-  const rawOffers = (offersRes.data ?? []) as unknown as Record<string, unknown>[];
+  const rawOffers = offersRes.rows;
   const offers = rawOffers
     .map(toAdminOffer)
     .filter((offer): offer is AdminOfferRow => offer !== null);
@@ -170,8 +172,9 @@ export function AdminDashboard() {
   const [statusFilter, setStatusFilter] = useState<OfferStatus | "all">("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<OfferSort>("newest");
+  const [page, setPage] = useState(1);
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const now = useNow(1000);
 
   const refresh = async () => {
@@ -201,9 +204,13 @@ export function AdminDashboard() {
     const { error } = await supabase.from("offers").update({ status: next }).eq("id", offer.id);
     setPendingId(null);
     if (error) {
-      setNotice(`Could not update “${offer.item_name}” — ${error.message}`);
+      setNotice({ tone: "error", text: `Could not update “${offer.item_name}” — ${error.message}` });
       return;
     }
+    setNotice({
+      tone: "ok",
+      text: `Status set to “${OFFER_STATUS_LABELS[next]}” for “${offer.item_name}”.`,
+    });
     setState((prev) =>
       prev.phase === "ready"
         ? {
@@ -249,6 +256,9 @@ export function AdminDashboard() {
   const { settings, offers, followerCount } = state;
   const counts = countByStatus(offers);
   const visible = sortOffers(filterOffers(offers, { status: statusFilter, query }), sort);
+  const totalPages = Math.max(1, Math.ceil(visible.length / LIST_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = pageSlice(visible, safePage, LIST_PAGE_SIZE);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
@@ -257,6 +267,9 @@ export function AdminDashboard() {
         <div className="flex items-center gap-3">
           <Link href="/admin/settings/" className="text-xs text-faded underline hover:text-accent">
             Launch controls
+          </Link>
+          <Link href="/admin/trades/" className="text-xs text-faded underline hover:text-accent">
+            Trades
           </Link>
           <Link href="/admin/followers/" className="text-xs text-faded underline hover:text-accent">
             Followers
@@ -314,6 +327,7 @@ export function AdminDashboard() {
           <h2 className="font-display text-xs uppercase tracking-widest text-accent sm:text-sm">
             <span aria-hidden="true">▸ </span>Offers ({offers.length})
           </h2>
+          <ExportCsvButton kind="offers" />
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -323,7 +337,10 @@ export function AdminDashboard() {
               id="offer-status-filter"
               className={inputClass}
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as OfferStatus | "all")}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as OfferStatus | "all");
+                setPage(1);
+              }}
             >
               <option value="all">All statuses</option>
               {OFFER_STATUSES.map((status) => (
@@ -341,7 +358,10 @@ export function AdminDashboard() {
               value={query}
               maxLength={200}
               placeholder="Item, name, email, city…"
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -350,7 +370,10 @@ export function AdminDashboard() {
               id="offer-sort"
               className={inputClass}
               value={sort}
-              onChange={(e) => setSort(e.target.value as OfferSort)}
+              onChange={(e) => {
+                setSort(e.target.value as OfferSort);
+                setPage(1);
+              }}
             >
               {(Object.keys(OFFER_SORT_LABELS) as OfferSort[]).map((key) => (
                 <option key={key} value={key}>
@@ -362,8 +385,13 @@ export function AdminDashboard() {
         </div>
 
         {notice ? (
-          <p role="alert" className="mt-4 border-[3px] border-alert px-3 py-2 text-sm text-alert">
-            {notice}
+          <p
+            role={notice.tone === "error" ? "alert" : "status"}
+            className={`mt-4 border-[3px] px-3 py-2 text-sm ${
+              notice.tone === "error" ? "border-alert text-alert" : "border-mint text-mint"
+            }`}
+          >
+            {notice.text}
           </p>
         ) : null}
 
@@ -393,7 +421,7 @@ export function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((offer) => (
+                {paged.map((offer) => (
                   <OfferRow
                     key={offer.id}
                     offer={offer}
@@ -405,6 +433,35 @@ export function AdminDashboard() {
             </table>
           </Panel>
         )}
+
+        {visible.length > LIST_PAGE_SIZE ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-faded">
+              {pageSummary(visible.length, safePage, LIST_PAGE_SIZE)}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="border-[3px] border-edge px-3 py-1.5 font-display text-[9px] uppercase tracking-wider text-faded transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50 sm:text-[10px]"
+                disabled={safePage <= 1}
+                onClick={() => setPage(safePage - 1)}
+              >
+                ← Prev
+              </button>
+              <span className="text-xs text-faded">
+                Page {safePage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="border-[3px] border-edge px-3 py-1.5 font-display text-[9px] uppercase tracking-wider text-faded transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50 sm:text-[10px]"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage(safePage + 1)}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <p className="mt-3 text-xs leading-relaxed text-faded">
           Status changes here never publish anything publicly. Offers are never

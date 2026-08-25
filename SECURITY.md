@@ -2,7 +2,7 @@
 
 Scope: focused MVP security review (playbook prompt 15). The goal is a
 defensible small-audience deployment, not enterprise hardening. Last review:
-2026-08-20.
+2026-08-20; prompt-27 admin-safety follow-up 2026-08-25.
 
 ## Protections implemented
 
@@ -41,6 +41,26 @@ defensible small-audience deployment, not enterprise hardening. Last review:
   user's UUID changes. New passwords must be at least 8 characters and
   match in both fields. The page is excluded from search indexes by the
   admin layout's robots metadata.
+- **No hard deletes of business records (prompt 27).** `DELETE` on `offers`,
+  `followers`, `trades` and `email_broadcast_recipients` is **revoked from
+  the `authenticated` role** and the matching `admin_delete` RLS policies are
+  dropped (`20260825000012_trade_safety.sql`). Even a fully signed-in admin
+  using the anon-key browser client cannot delete these rows — records are
+  archived by status/timestamp or corrected, never removed. `trade_media`
+  keeps DELETE because replacing a trade's photo set rewrites media rows, and
+  service-role (dashboard) emergency access is unchanged.
+- **Published-trade corrections go through one transactional RPC.**
+  `update_published_trade(...)` is `SECURITY INVOKER` with an explicit
+  `is_admin()` gate and `EXECUTE` granted to `authenticated` only. It locks
+  the trade row, re-checks publicity consent, rejects any historical-value
+  change unless the caller passes an explicit confirmation flag, refuses to
+  touch the frozen USD fair-market value on BTC trades, and re-syncs the
+  homepage `challenge_settings` row in the same transaction when the
+  corrected trade is the current item. There is no browser-side write
+  sequence to a published trade.
+- **Idempotent publish.** A retried or double `publish_trade` call cannot
+  create a second trade or report failure: once the source offer is
+  `completed`, the RPC returns the existing trade for that offer.
 
 ### Input handling
 
@@ -82,6 +102,13 @@ defensible small-audience deployment, not enterprise hardening. Last review:
   The allowlist is enforced by both a Postgres check constraint and the
   Edge Function.
 - Console logs on errors include only operational context (no user data).
+- **Admin CSV exports stay in the admin session (prompt 27).** The offers,
+  followers/preferences and trades exports are generated entirely in the
+  signed-in admin's browser from rows RLS already authorizes that session to
+  read; no file is uploaded anywhere and no new server-side surface is
+  created. They intentionally include private recordkeeping columns (contact
+  data, admin notes, BTC verification fields) because they are the
+  operator's own compliance/backup records.
 
 ## Known limitations
 
@@ -103,6 +130,9 @@ defensible small-audience deployment, not enterprise hardening. Last review:
 - **`app_admins` is readable by any authenticated Supabase user** (UUIDs
   only — no emails). Required so RLS policies can evaluate; knowing an
   admin UUID grants nothing.
+- **CSV exports are plaintext once downloaded.** They contain contact data
+  and private notes; protection of the resulting file (disk encryption,
+  access control, timely deletion) is an operator responsibility.
 - **GitHub Pages serves a static site** — no server-side security headers
   (CSP etc.) are configurable beyond the platform defaults.
 
@@ -120,3 +150,6 @@ defensible small-audience deployment, not enterprise hardening. Last review:
   anomalies (offer/follower spikes from single IPs).
 - Periodically delete orphaned `offer-drafts/*` storage objects for offers
   that never submitted.
+- Treat downloaded CSV exports as sensitive records: keep them on an
+  encrypted device, restrict access, and delete copies that are no longer
+  needed.
