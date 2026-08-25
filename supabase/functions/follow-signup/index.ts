@@ -2,8 +2,10 @@
 // Writes through the service role; there are deliberately no public INSERT
 // policies on followers. Sends a guarded Resend confirmation.
 
+import { captchaConfig, fetchCaptchaVerification, verifyCaptchaToken } from "../_shared/captcha.ts";
 import { corsHeaders, isOriginAllowed } from "../_shared/cors.ts";
 import { isValidEmail, normalizeEmail, sanitizeText } from "../_shared/email.ts";
+import { errorMessage } from "../_shared/logging.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
 import { buildConfirmation, resendConfigured, sendEmail, siteUrl } from "../_shared/resend.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
@@ -50,6 +52,12 @@ Deno.serve(async (req) => {
     // Honeypot: silently accept bots that fill the hidden field.
     if (typeof record.website === "string" && record.website.trim() !== "") {
       return json({ ok: true, email_updates_opt_in: false, trade_interest: false }, 200, cors);
+    }
+
+    // Optional CAPTCHA — a no-op unless CAPTCHA_PROVIDER/CAPTCHA_SECRET set.
+    const captcha = captchaConfig((key) => Deno.env.get(key));
+    if (!(await verifyCaptchaToken(captcha, record.captcha_token, clientIp(req), fetchCaptchaVerification))) {
+      return json({ error: "CAPTCHA verification failed. Please try again." }, 400, cors);
     }
 
     const email = normalizeEmail(record.email);
@@ -175,7 +183,7 @@ Deno.serve(async (req) => {
       cors,
     );
   } catch (err) {
-    console.error("follow-signup failed:", err);
+    console.error("follow-signup failed:", errorMessage(err));
     return json({ error: "Something went wrong. Please try again." }, 500, cors);
   }
 });

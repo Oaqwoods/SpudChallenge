@@ -641,6 +641,8 @@ export function AdminOfferDetail() {
                     <img
                       src={file.signedUrl}
                       alt="Private offer upload"
+                      loading="lazy"
+                      decoding="async"
                       className="aspect-square w-full border-[3px] border-edge object-cover"
                     />
                   ) : (

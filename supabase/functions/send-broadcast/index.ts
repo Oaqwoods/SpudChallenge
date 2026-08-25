@@ -8,6 +8,7 @@
 
 import { chunk, MAX_BATCH_SIZE, resolveAudience, type AudienceRow, type AudienceType } from "../_shared/broadcast.ts";
 import { corsHeaders, isOriginAllowed } from "../_shared/cors.ts";
+import { errorMessage } from "../_shared/logging.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
 import { resendConfigured, sendBatch, siteUrl } from "../_shared/resend.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
@@ -180,7 +181,7 @@ Deno.serve(async (req) => {
   try {
     adminId = await verifyAdmin(bearerToken(req));
   } catch (err) {
-    console.error("send-broadcast admin verification failed:", err);
+    console.error("send-broadcast admin verification failed:", errorMessage(err));
     return json({ error: "Admin verification is unavailable right now." }, 500, cors);
   }
   if (!adminId) {
@@ -363,7 +364,7 @@ Deno.serve(async (req) => {
         cors,
       );
     } catch (err) {
-      console.error("send-broadcast failed mid-send:", err);
+      console.error("send-broadcast failed mid-send:", errorMessage(err));
       // Leave an accurate trail: the broadcast is no longer in flight.
       await supabase
         .from("email_broadcasts")
@@ -376,7 +377,7 @@ Deno.serve(async (req) => {
       );
     }
   } catch (err) {
-    console.error("send-broadcast failed:", err);
+    console.error("send-broadcast failed:", errorMessage(err));
     return json({ error: "Something went wrong. Please try again." }, 500, cors);
   }
 });

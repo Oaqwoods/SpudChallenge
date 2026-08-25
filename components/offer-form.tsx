@@ -439,7 +439,7 @@ export function OfferForm() {
             {photos.map((p) => (
               <li key={p.id} className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.previewUrl} alt="Offer item upload"
+                <img src={p.previewUrl} alt="Offer item upload" loading="lazy" decoding="async"
                   className={`aspect-square w-full border-[3px] object-cover ${
                     p.status === "error" ? "border-alert" : p.status === "uploaded" ? "border-mint" : "border-edge"
                   }`} />

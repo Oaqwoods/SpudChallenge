@@ -6,6 +6,7 @@
 
 import { corsHeaders, isOriginAllowed } from "../_shared/cors.ts";
 import { isValidEmail, normalizeEmail } from "../_shared/email.ts";
+import { errorMessage } from "../_shared/logging.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
 import { verifyPreferenceToken } from "../_shared/token.ts";
@@ -82,7 +83,7 @@ Deno.serve(async (req) => {
     // emails are subscribed (email enumeration).
     return json({ ok: true }, 200, cors);
   } catch (err) {
-    console.error("email-preferences failed:", err);
+    console.error("email-preferences failed:", errorMessage(err));
     return json({ error: "Something went wrong. Please try again." }, 500, cors);
   }
 });

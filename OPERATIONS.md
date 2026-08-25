@@ -88,6 +88,24 @@ Function items marked **[deploy]**.
    the files somewhere safe.
 5. Attorney review of Terms/Privacy placeholders before relying on them.
 
+## Optional: turn on CAPTCHA (off by default)
+
+Signups, offers, and offer-photo uploads absorb bots through honeypots,
+rate limits and body caps. If you still see automated spam, enable the
+built-in CAPTCHA integration point:
+
+1. Pick a provider (Cloudflare Turnstile or hCaptcha), create a site key +
+   secret for `spudchallenge.online`.
+2. `supabase secrets set CAPTCHA_PROVIDER=turnstile CAPTCHA_SECRET=<secret>`
+   (or `CAPTCHA_PROVIDER=hcaptcha`), then redeploy the three functions
+   `follow-signup`, `offer-upload`, `submit-offer`.
+3. Add the provider's widget to the public forms and pass the widget token
+   as `captcha_token` in the existing submission payloads.
+
+Until step 3 ships, a configured CAPTCHA blocks all submissions
+(fail-closed) — so configure the widget first. Unset both secrets to
+disable. Unsubscribe links never need a CAPTCHA.
+
 ## Emergency contacts & rollbacks
 
 - Lost admin password: `/admin/login/` → **Forgot your password?** → enter

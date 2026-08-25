@@ -4,7 +4,9 @@
 // from challenge_settings and snapshotted server-side — client-supplied
 // values are never trusted.
 
+import { captchaConfig, fetchCaptchaVerification, verifyCaptchaToken } from "../_shared/captcha.ts";
 import { corsHeaders, isOriginAllowed } from "../_shared/cors.ts";
+import { errorMessage } from "../_shared/logging.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
 import {
@@ -92,6 +94,12 @@ Deno.serve(async (req) => {
     // Honeypot: silently accept bots.
     if (typeof record.website === "string" && record.website.trim() !== "") {
       return json({ ok: true }, 200, cors);
+    }
+
+    // Optional CAPTCHA — a no-op unless CAPTCHA_PROVIDER/CAPTCHA_SECRET set.
+    const captcha = captchaConfig((key) => Deno.env.get(key));
+    if (!(await verifyCaptchaToken(captcha, record.captcha_token, clientIp(req), fetchCaptchaVerification))) {
+      return json({ error: "CAPTCHA verification failed. Please try again." }, 400, cors);
     }
 
     // --- Authoritative current item (spec §26) -------------------------
@@ -265,7 +273,7 @@ Deno.serve(async (req) => {
 
     return json({ ok: true }, 200, cors);
   } catch (err) {
-    console.error("submit-offer failed:", err);
+    console.error("submit-offer failed:", errorMessage(err));
     return json({ error: "Something went wrong. Please try again." }, 500, cors);
   }
 });

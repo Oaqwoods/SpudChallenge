@@ -6,6 +6,7 @@
 
 import { corsHeaders, isOriginAllowed } from "../_shared/cors.ts";
 import { sanitizeText } from "../_shared/email.ts";
+import { errorMessage } from "../_shared/logging.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
 
@@ -82,7 +83,7 @@ Deno.serve(async (req) => {
     if (error) throw error;
     return json({ ok: true }, 200, cors);
   } catch (err) {
-    console.error("track-event failed:", err);
+    console.error("track-event failed:", errorMessage(err));
     // Telemetry is best-effort: never surface storage failures as errors.
     return json({ ok: true }, 200, cors);
   }

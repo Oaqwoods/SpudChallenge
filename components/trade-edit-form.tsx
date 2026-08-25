@@ -461,7 +461,7 @@ export function TradeEditForm({ tradeId }: { tradeId: string }) {
                 {media.map((m) => (
                   <li key={m.key} className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={m.previewUrl} alt={m.alt_text ?? "Public trade image"}
+                    <img src={m.previewUrl} alt={m.alt_text ?? "Public trade image"} loading="lazy" decoding="async"
                       className={`aspect-square w-full border-[3px] object-cover ${
                         m.status === "error" ? "border-alert" : m.status === "uploading" ? "border-edge" : "border-mint"
                       }`} />

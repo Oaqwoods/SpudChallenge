@@ -2,7 +2,8 @@
 
 Scope: focused MVP security review (playbook prompt 15). The goal is a
 defensible small-audience deployment, not enterprise hardening. Last review:
-2026-08-20; prompt-27 admin-safety follow-up 2026-08-25.
+2026-08-20; prompt-27 admin-safety and prompt-28 volume/upload-hardening
+follow-ups 2026-08-25.
 
 ## Protections implemented
 
@@ -71,12 +72,20 @@ defensible small-audience deployment, not enterprise hardening. Last review:
   caps via `sanitizeText` (control characters stripped, truncated), value
   caps, and honeypot fields that silently absorb bots.
 - **Upload abuse controls:** image MIME allowlist only (jpeg/png/webp),
-  10 MB size cap, server-generated storage paths (no client-controlled
-  names, so no path traversal), HMAC submit tokens binding each issued path
-  to the eventual submission, and existence verification before an offer
-  references a photo. Signed photo URLs for admins expire in 15 minutes.
+  server-generated storage paths (no client-controlled names, so no path
+  traversal), HMAC submit tokens binding each issued path to the eventual
+  submission, and existence verification before an offer references a
+  photo. Signed photo URLs for admins expire in 15 minutes.
+- **File-size caps enforced twice (prompt 28):** the 10 MB limit is checked
+  at upload-URL issuance against the declared size AND at the bucket level —
+  migration `20260825000013` sets Supabase Storage `file_size_limit` to
+  10 MB on `offer-uploads` and `trade-media`, so a dishonest client cannot
+  push a larger object through a signed URL.
+- **Max 5 item photos per offer,** enforced server-side at submission
+  (`MAX_PHOTOS`) and in the form; anonymous uploads accept images only —
+  identity/title/proof-of-ownership documents are never collected.
 - **Payload size caps** on all public endpoints (65 KB on the large forms,
-  16 KB on small ones).
+  16 KB on small ones, including upload-URL issuance).
 - **Authoritative server state:** offer submissions snapshot the current
   item server-side and reject stale submissions rather than trusting
   browser-supplied challenge state.
@@ -94,6 +103,14 @@ defensible small-audience deployment, not enterprise hardening. Last review:
 - **Anti-enumeration:** follow signup returns identical responses for new
   and existing addresses; unsubscribe treats unknown addresses as success.
 - **Tokens:** HMAC tokens are compared in constant time.
+- **Optional CAPTCHA integration point, disabled by default (prompt 28).**
+  follow-signup, offer-upload and submit-offer verify a `captcha_token`
+  field only when `CAPTCHA_PROVIDER` (turnstile/hcaptcha) and
+  `CAPTCHA_SECRET` are set on the Edge Functions; otherwise the check is a
+  no-op and behavior is unchanged. Verification is fail-closed (an
+  unreachable provider rejects), provider responses are never logged, and
+  the HMAC-token-authenticated unsubscribe flow is exempt so emailed links
+  keep working.
 
 ### Privacy
 
@@ -101,7 +118,11 @@ defensible small-audience deployment, not enterprise hardening. Last review:
   coarse detail string — never emails, phone numbers, offer text or files.
   The allowlist is enforced by both a Postgres check constraint and the
   Edge Function.
-- Console logs on errors include only operational context (no user data).
+- **Error logs are sanitized (prompt 28):** every Edge Function catch block
+  logs `errorMessage(err)` (`_shared/logging.ts`) — the short message text
+  only. Raw error objects are never logged because PostgREST `details` can
+  carry user data (e.g. a duplicate-key DETAIL contains the conflicting
+  email), and no client/component code logs to the console at all.
 - **Admin CSV exports stay in the admin session (prompt 27).** The offers,
   followers/preferences and trades exports are generated entirely in the
   signed-in admin's browser from rows RLS already authorizes that session to

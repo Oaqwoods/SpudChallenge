@@ -2,7 +2,9 @@
 // The bucket is private; only paths issued here (with a matching HMAC
 // submit token) can be attached to an offer at submission time.
 
+import { captchaConfig, fetchCaptchaVerification, verifyCaptchaToken } from "../_shared/captcha.ts";
 import { corsHeaders, isOriginAllowed } from "../_shared/cors.ts";
+import { errorMessage } from "../_shared/logging.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
 import { UUID_RE } from "../_shared/offer-validation.ts";
@@ -10,6 +12,7 @@ import { issueOfferUpload } from "../_shared/storage.ts";
 
 const RATE_LIMIT = 20;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
+const MAX_BODY_BYTES = 16_384;
 
 function json(data: unknown, status: number, cors: Record<string, string>): Response {
   return new Response(JSON.stringify(data), {
@@ -33,6 +36,9 @@ Deno.serve(async (req) => {
   }
   if (!checkRateLimit(`offer-upload:${clientIp(req)}`, RATE_LIMIT, RATE_WINDOW_MS)) {
     return json({ error: "Too many requests. Please try again in a few minutes." }, 429, cors);
+  }
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
+    return json({ error: "Request too large." }, 413, cors);
   }
 
   try {
@@ -62,6 +68,12 @@ Deno.serve(async (req) => {
     }
     const record = body as Record<string, unknown>;
 
+    // Optional CAPTCHA — a no-op unless CAPTCHA_PROVIDER/CAPTCHA_SECRET set.
+    const captcha = captchaConfig((key) => Deno.env.get(key));
+    if (!(await verifyCaptchaToken(captcha, record.captcha_token, clientIp(req), fetchCaptchaVerification))) {
+      return json({ error: "CAPTCHA verification failed. Please try again." }, 400, cors);
+    }
+
     const draftId = typeof record.draft_id === "string" ? record.draft_id : "";
     if (!UUID_RE.test(draftId)) {
       return json({ error: "Invalid upload session." }, 400, cors);
@@ -82,7 +94,7 @@ Deno.serve(async (req) => {
 
     return json(issued, 200, cors);
   } catch (err) {
-    console.error("offer-upload failed:", err);
+    console.error("offer-upload failed:", errorMessage(err));
     return json({ error: "Something went wrong. Please try again." }, 500, cors);
   }
 });
