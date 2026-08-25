@@ -18,7 +18,9 @@ function validDraft(overrides: Partial<CompletionDraft> = {}): CompletionDraft {
     generalLocation: "Austin, TX",
     publicStory: "A classic first trade.",
     publicParticipantName: "",
-    publicityReleaseConfirmed: false,
+    // Baseline attests the publicity check: the media present contains no
+    // identifiable person (prompt 34 case 14).
+    publicityReleaseConfirmed: true,
     mediaCount: 1,
     btcSide: null,
     btcAmount: null,
@@ -45,10 +47,21 @@ test("validateCompletion enforces the required public fields", () => {
 });
 
 test("validateCompletion requires publicity consent for a participant name", () => {
-  const withName = validDraft({ publicParticipantName: "Spud" });
+  const withName = validDraft({ publicParticipantName: "Spud", publicityReleaseConfirmed: false });
   assert.match(validateCompletion(withName) ?? "", /publicity release/);
   assert.equal(
     validateCompletion(validDraft({ publicParticipantName: "Spud", publicityReleaseConfirmed: true })),
+    null,
+  );
+});
+
+test("validateCompletion requires the recorded publicity check for public images (case 14)", () => {
+  const withMedia = validDraft({ mediaCount: 2, publicityReleaseConfirmed: false });
+  assert.match(validateCompletion(withMedia) ?? "", /publicity check before publishing public images/);
+  assert.equal(validateCompletion(validDraft({ mediaCount: 2, publicityReleaseConfirmed: true })), null);
+  // No name and no media: nothing identifiable, no attestation needed.
+  assert.equal(
+    validateCompletion(validDraft({ mediaCount: 0, publicityReleaseConfirmed: false })),
     null,
   );
 });

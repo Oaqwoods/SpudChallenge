@@ -262,3 +262,40 @@ needed.** Evidence below, verified by reading the actual files.
 | `npm test` | 155/155 pass |
 | `npx tsc --noEmit` | clean |
 | `npm run build` (static export) | clean |
+
+---
+
+## Addendum — PROMPT 34 final edge-case check (2026-08-25)
+
+The playbook's final verification pass: all 16 failure cases checked
+against the code. **15 passed on existing mechanisms; one gap found and
+fixed (case 14 — publicity consent covered names only, not identifiable
+media).** No product features were added.
+
+| # | Failure case | Verdict | Evidence |
+| --- | --- | --- | --- |
+| 1 | Offer started against item A, item B becomes current before submission | ✅ | submit-offer compares the client's offered-against snapshot with the authoritative settings row and rejects with `current_item_changed`; the stored offer snapshots the server-side current item (spec §26, prompt 26) |
+| 2 | Meetup happens but either party walks away | ✅ | `did_not_complete` transition (two-step armed input with reason), touches only that offer row — public item/value/trade count unchanged; shortlisted offers stay selectable (prompt 25, transition guard trigger) |
+| 3 | Admin double-clicks Publish Trade | ✅ | Client guard (`publishing || published`) + `publish_trade` idempotent replay: a completed offer with an existing trade returns that trade instead of duplicating or failing (prompt 27, migration 12) |
+| 4 | Admin double-clicks Send Email | ✅ | Atomic draft→sending claim (`.eq("status","draft")` update), 409 guards for sent/sending, per-recipient sent-log skips already-delivered addresses, server requires an explicit confirm flag (prompt 12) |
+| 5 | Follower unsubscribes after opting into the wall | ✅ | Unsubscribe sets `email_updates_opt_in=false` + stamps `email_updates_unsubscribed_at`; `public_follower_wall` requires both flags active, so the entry disappears immediately (migrations 2, prompts 6/23/33) |
+| 6 | Trade-interest-only lead receives ongoing broadcasts | ✅ | Ongoing audience requires `email_updates_opt_in=true` AND `unsubscribed_at IS NULL` (SQL + `resolveAudience`, test-locked); trade-interest-only rows are excluded |
+| 7 | Anonymous upload of a non-image file | ✅ | Upload-URL issuance validates MIME against the jpeg/png/webp allowlist and maps extensions; submission re-checks the path extension (`isAllowedPath`); bucket accepts only service-role writes on issued paths |
+| 8 | Malicious/external URL from a submitter | ✅ | `comp_url` restricted to `http(s)://` (≤ 2048 chars) by validation AND the DB check constraint; never fetched server-side; rendered as an escaped link with `rel="noopener noreferrer"` — no `javascript:`/`data:` possible |
+| 9 | Supabase fails while a public page loads | ✅ | `fetchChallengeData` catches and returns `EMPTY_DATA` + error; every section falls back to `DEFAULT_SETTINGS`/empty lists — the page renders coherently and conservatively (forms read as closed/prelaunch), recovering on the next refetch without a crash |
+| 10 | Offer volume reaches thousands of rows | ✅ | Admin lists fetch page-by-page (`fetchAllRows`, no silent caps) and render 25 per page with a pager (prompt 27); public-facing reads never touch offers; uploads/offers rate-limited per IP |
+| 11 | Admin corrects a typo in a published trade | ✅ | `/admin/trades/edit/` → `update_published_trade` RPC: one transaction, value-change confirmation, homepage re-sync when editing the current trade (prompt 27) |
+| 12 | Challenge expires with a selected trade not completed | ✅ | By design: offers close server-side the moment `end_at` passes (`challengeEnded`), but the final meetup may still complete and publish until the admin sets status `complete`, which freezes the trade order (prompt 30, migration 15; documented in OPERATIONS) |
+| 13 | Challenge paused but countdown continues | ✅ | The pause save writes ONLY `offers_paused`/`follower_signups_paused`/`public_notice` — schedule/clock columns untouched by construction (prompt 30, unit-tested) |
+| 14 | Identifiable trader media published without recorded consent | ✅ **fixed** | Consent previously keyed on the participant name only. The publish and edit gates now require the recorded publicity check whenever a name OR any public image is present — an attestation that no person is identifiable or a release is on file (`validateCompletion`/`validateTradeEdit`, both forms, 2 new tests); names remain additionally enforced by the DB constraint + RPCs; likeness boundaries documented in SECURITY.md |
+| 15 | BTC trade published; scoreboard must stay frozen as the market moves | ✅ | The frozen USD FMV is written once at publish (`incoming_value = btc_usd_value` on the BTC side); nothing re-reads market prices — the DB value is the score; public pages show the frozen note (spec §38, prompt 19) |
+| 16 | BTC recordkeeping contains no secrets; wallet/tx never public | ✅ | Fields are limited to address + transaction ID (no key/seed/credential fields exist); both are excluded from every public view and appear only in the admin UI + CSV exports; bounds documented in SECURITY.md |
+
+### Final verification runs (2026-08-25)
+
+| Check | Result |
+| --- | --- |
+| `npm test` (incl. new case-14 consent tests) | 157/157 pass |
+| `npm run lint` | clean |
+| `npx tsc --noEmit` | clean |
+| Final production static export/build | clean, 21/21 static pages |

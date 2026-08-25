@@ -139,6 +139,20 @@ prompt-29 valuation/verification-documents follow-ups 2026-08-25.
   documents are excluded from every public view; public pages render
   "Verified" only when `valuation_status = 'verified'`, and the scoreboard
   reads the final challenge value written atomically at publish.
+- **Recorded consent covers likeness, not just names (prompt 34 case 14).**
+  Publishing or editing a trade with a participant name OR any public image
+  requires the recorded publicity check — the admin attests that either no
+  person is identifiable in the media or a release is on file; names are
+  additionally enforced server-side (constraint + RPCs). Identifiability of
+  a photo is a human judgment, which is why the attestation is recorded on
+  the trade row (`publicity_release_confirmed`).
+- **BTC recordkeeping bounds (prompt 34 case 16).** The Bitcoin fields are
+  limited to amount, USD fair-market value, valuation timestamp/source,
+  wallet **address** and **transaction ID** — public verification data. The
+  schema has no field for private keys, seed phrases, or exchange
+  credentials, and operators must never enter them into any notes field;
+  the address/transaction fields appear only in the admin UI and CSV
+  exports, never in a public view.
 - **Admin CSV exports stay in the admin session (prompt 27).** The offers,
   followers/preferences and trades exports are generated entirely in the
   signed-in admin's browser from rows RLS already authorizes that session to

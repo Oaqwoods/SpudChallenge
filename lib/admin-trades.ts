@@ -126,6 +126,7 @@ export interface TradeEditDraft {
   publicStory: string;
   publicParticipantName: string;
   publicityReleaseConfirmed: boolean;
+  mediaCount: number;
 }
 
 // Historical value changes need an explicit confirmation step (prompt 27) —
@@ -220,8 +221,15 @@ export function validateTradeEdit(original: AdminTradeRow, draft: TradeEditDraft
   if (!draft.generalLocation.trim()) {
     return "Enter a public general location (city/state or broader).";
   }
-  if (draft.publicParticipantName.trim() && !draft.publicityReleaseConfirmed) {
-    return "Confirm the publicity release before publishing a participant name.";
+  // Prompt 34 case 14 (mirror of the publish gate): recorded consent is
+  // required whenever a name or public media is present.
+  if (
+    (draft.publicParticipantName.trim() || draft.mediaCount > 0) &&
+    !draft.publicityReleaseConfirmed
+  ) {
+    return draft.publicParticipantName.trim()
+      ? "Confirm the publicity release before publishing a participant name."
+      : "Confirm the publicity check before publishing public images.";
   }
   if (tradeValuesChanged(original, draft) && original.btc_amount !== null) {
     return "BTC trades hold a frozen USD fair-market value; historical values cannot be edited here.";

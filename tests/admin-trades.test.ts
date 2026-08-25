@@ -61,6 +61,7 @@ function draft(overrides: Partial<TradeEditDraft> = {}): TradeEditDraft {
     publicStory: t.public_story ?? "",
     publicParticipantName: "",
     publicityReleaseConfirmed: false,
+    mediaCount: 0,
     ...overrides,
   };
 }
@@ -157,6 +158,16 @@ test("validateTradeEdit requires publicity consent for a participant name", () =
   assert.match(String(validateTradeEdit(original, withName)), /publicity release/i);
   assert.equal(
     validateTradeEdit(original, { ...withName, publicityReleaseConfirmed: true }),
+    null,
+  );
+});
+
+test("validateTradeEdit requires the recorded publicity check when media is present (case 14)", () => {
+  const original = trade();
+  const withMedia = draft({ mediaCount: 3 });
+  assert.match(String(validateTradeEdit(original, withMedia)), /publicity check/i);
+  assert.equal(
+    validateTradeEdit(original, { ...withMedia, publicityReleaseConfirmed: true }),
     null,
   );
 });

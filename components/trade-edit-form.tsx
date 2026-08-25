@@ -354,6 +354,7 @@ export function TradeEditForm({ tradeId }: { tradeId: string }) {
     publicStory,
     publicParticipantName: participantName,
     publicityReleaseConfirmed: publicityConfirmed,
+    mediaCount: media.length,
   };
   const valuesChanged = tradeValuesChanged(trade, draft);
 
@@ -558,11 +559,13 @@ export function TradeEditForm({ tradeId }: { tradeId: string }) {
             <input className={inputClass} value={participantName} maxLength={200}
               onChange={(e) => setParticipantName(e.target.value)} />
           </Field>
-          {participantName.trim() ? (
+          {participantName.trim() || media.length > 0 ? (
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" className="mt-1 accent-accent" checked={publicityConfirmed}
                 onChange={(e) => setPublicityConfirmed(e.target.checked)} />
-              Publicity consent/release for this name was obtained (required to publish a name).
+              Publicity consent recorded: no person is identifiable in the
+              public media, or the participant&apos;s name/likeness is covered
+              by a release (required to publish a name or images).
             </label>
           ) : null}
           <div className="flex flex-col gap-2">

@@ -50,8 +50,17 @@ export function validateCompletion(draft: CompletionDraft): string | null {
   if (!draft.generalLocation.trim()) {
     return "Enter a public general location (city/state or broader).";
   }
-  if (draft.publicParticipantName.trim() && !draft.publicityReleaseConfirmed) {
-    return "Confirm the publicity release before publishing a participant name.";
+  // Prompt 34 case 14: identifiable content needs RECORDED consent. The flag
+  // doubles as the attestation for photos — either nobody is identifiable in
+  // the media, or a release is on file. Names are additionally enforced by
+  // the DB constraint trades_publicity_consent.
+  if (
+    (draft.publicParticipantName.trim() || draft.mediaCount > 0) &&
+    !draft.publicityReleaseConfirmed
+  ) {
+    return draft.publicParticipantName.trim()
+      ? "Confirm the publicity release before publishing a participant name."
+      : "Confirm the publicity check before publishing public images.";
   }
   if (draft.mediaCount > MAX_PUBLIC_IMAGES) {
     return `At most ${MAX_PUBLIC_IMAGES} public images are allowed.`;
