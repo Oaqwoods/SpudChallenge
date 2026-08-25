@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ALLOWED_MIME,
+  challengeEnded,
   MAX_PHOTOS,
   normalizeEmail,
   isValidEmail,
@@ -95,4 +96,29 @@ test("uploadSubmitToken binds tokens to exact paths", async () => {
   // domain separation: an email-preference-style token must not verify a path
   assert.equal(typeof token, "string");
   assert.ok(token.length >= 64);
+});
+
+test("challengeEnded closes offers at completion, including clock expiry", () => {
+  const end = Date.parse("2026-09-22T15:30:00.000Z");
+  const active = { status: "active", end_at: "2026-09-22T15:30:00.000Z" };
+  assert.equal(challengeEnded(active, end - 1), false, "still open before end_at");
+  assert.equal(challengeEnded(active, end), true, "closed the moment end_at passes");
+  // Stored status stays 'active' after the clock runs out — still closed.
+  assert.equal(challengeEnded(active, end + 7 * 24 * 60 * 60 * 1000), true);
+  assert.equal(
+    challengeEnded({ status: "complete", end_at: null }, end - 1),
+    true,
+    "explicit completion closes even before end_at",
+  );
+  assert.equal(
+    challengeEnded({ status: "active", end_at: null }, end + 1),
+    false,
+    "no deadline and not explicitly complete stays open",
+  );
+  assert.equal(challengeEnded(null, end), true, "missing settings fail closed");
+  assert.equal(
+    challengeEnded({ status: "active", end_at: "not-a-date" }, end),
+    false,
+    "unreadable deadline is ignored rather than closing by accident",
+  );
 });

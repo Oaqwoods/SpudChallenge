@@ -54,6 +54,25 @@ export function isPositiveAmount(value: unknown, cap: number): number | null {
   return n;
 }
 
+// Prompt 30: at completion, new offers are disabled by default. Completion
+// is explicit (stored status 'complete') or the clock running out — the
+// stored status stays 'active' past end_at until an admin flips it, so the
+// deadline must be checked server-side too. Pure — unit tested under Node.
+export function challengeEnded(
+  settings: { status?: string | null; end_at?: string | null } | null,
+  nowMs: number,
+): boolean {
+  // No authoritative settings: fail closed rather than accept offers into a
+  // challenge we cannot place.
+  if (!settings) return true;
+  if (settings.status === "complete") return true;
+  if (typeof settings.end_at === "string" && settings.end_at !== "") {
+    const end = Date.parse(settings.end_at);
+    if (!Number.isNaN(end) && nowMs >= end) return true;
+  }
+  return false;
+}
+
 // HMAC binding between an issued upload path and the eventual offer
 // submission: an attacker who guesses/learns a storage path cannot attach it
 // to an offer without the matching submit token. Domain-separated from other

@@ -7,7 +7,7 @@ import { corsHeaders, isOriginAllowed } from "../_shared/cors.ts";
 import { errorMessage } from "../_shared/logging.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
-import { UUID_RE } from "../_shared/offer-validation.ts";
+import { challengeEnded, UUID_RE } from "../_shared/offer-validation.ts";
 import { issueOfferUpload } from "../_shared/storage.ts";
 
 const RATE_LIMIT = 20;
@@ -50,16 +50,24 @@ Deno.serve(async (req) => {
     const supabase = getAdminClient();
     const settingsRes = await supabase
       .from("challenge_settings")
-      .select("status, offers_paused")
+      .select("status, offers_paused, end_at")
       .eq("id", 1)
       .maybeSingle();
     if (settingsRes.error) throw settingsRes.error;
-    const settings = settingsRes.data as { status?: string; offers_paused?: boolean } | null;
+    const settings = settingsRes.data as {
+      status?: string;
+      offers_paused?: boolean;
+      end_at?: string | null;
+    } | null;
     if (settings?.offers_paused) {
       return json({ error: "Offers are paused right now. Please check back soon." }, 503, cors);
     }
     if (settings?.status !== "active") {
       return json({ error: "Offers open when the challenge starts." }, 409, cors);
+    }
+    // Prompt 30: no upload sessions once the challenge has ended.
+    if (challengeEnded(settings ?? null, Date.now())) {
+      return json({ error: "The challenge has ended — offers are closed." }, 409, cors);
     }
 
     const body = await req.json().catch(() => null);

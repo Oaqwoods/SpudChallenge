@@ -2,12 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   CHALLENGE_DURATION_MS,
+  buildPauseUpdate,
   buildSettingsUpdate,
   canStartChallenge,
   computeLaunchWindow,
   datetimeLocalToIso,
   draftFromSettings,
   isoToDatetimeLocal,
+  pauseDraftFromSettings,
+  PUBLIC_NOTICE_MAX,
   validateSettingsDraft,
 } from "../lib/admin-settings.ts";
 import { DEFAULT_SETTINGS } from "../lib/challenge.ts";
@@ -105,4 +108,48 @@ test("buildSettingsUpdate produces the storage payload", () => {
   assert.equal(update.current_item_description, null);
   assert.equal(update.current_item_general_location, "Springfield");
   assert.equal(update.status, "prelaunch");
+});
+
+test("buildSettingsUpdate never writes the pause columns", () => {
+  const update = buildSettingsUpdate(draftFromSettings(DEFAULT_SETTINGS));
+  assert.equal("offers_paused" in update, false);
+  assert.equal("follower_signups_paused" in update, false);
+  assert.equal("public_notice" in update, false);
+});
+
+test("pauseDraftFromSettings mirrors the stored pause state", () => {
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    offers_paused: true,
+    follower_signups_paused: false,
+    public_notice: "Back soon",
+  };
+  assert.deepEqual(pauseDraftFromSettings(settings), {
+    offers_paused: true,
+    follower_signups_paused: false,
+    public_notice: "Back soon",
+  });
+  assert.equal(pauseDraftFromSettings(DEFAULT_SETTINGS).public_notice, "");
+});
+
+test("buildPauseUpdate writes only the three pause columns, trimmed and capped", () => {
+  const update = buildPauseUpdate({
+    offers_paused: true,
+    follower_signups_paused: true,
+    public_notice: `  ${"n".repeat(PUBLIC_NOTICE_MAX + 100)}  `,
+  });
+  assert.deepEqual(Object.keys(update).sort(), [
+    "follower_signups_paused",
+    "offers_paused",
+    "public_notice",
+  ]);
+  assert.equal(update.offers_paused, true);
+  assert.equal(update.follower_signups_paused, true);
+  assert.equal((update.public_notice as string).length, PUBLIC_NOTICE_MAX);
+  assert.equal(
+    buildPauseUpdate({ offers_paused: false, follower_signups_paused: false, public_notice: "   " })
+      .public_notice,
+    null,
+    "blank notice clears the hero banner",
+  );
 });

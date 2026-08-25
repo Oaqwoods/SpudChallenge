@@ -112,3 +112,32 @@ export function buildSettingsUpdate(draft: SettingsDraft): Record<string, unknow
     current_item_general_location: str(draft.current_item_general_location.trim()),
   };
 }
+
+// Pause / resume + public notice (playbook PROMPT 30). Deliberately a
+// SEPARATE update from buildSettingsUpdate: pausing must never touch the
+// schedule fields ("pausing does not alter the challenge clock"), and a
+// normal settings save must never unpause anything by accident.
+
+export const PUBLIC_NOTICE_MAX = 500;
+
+export interface PauseDraft {
+  offers_paused: boolean;
+  follower_signups_paused: boolean;
+  public_notice: string;
+}
+
+export function pauseDraftFromSettings(s: ChallengeSettings): PauseDraft {
+  return {
+    offers_paused: s.offers_paused,
+    follower_signups_paused: s.follower_signups_paused,
+    public_notice: s.public_notice ?? "",
+  };
+}
+
+export function buildPauseUpdate(draft: PauseDraft): Record<string, unknown> {
+  return {
+    offers_paused: draft.offers_paused,
+    follower_signups_paused: draft.follower_signups_paused,
+    public_notice: str(draft.public_notice.trim().slice(0, PUBLIC_NOTICE_MAX)),
+  };
+}

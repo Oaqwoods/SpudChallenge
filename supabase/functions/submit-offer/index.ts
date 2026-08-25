@@ -10,6 +10,7 @@ import { errorMessage } from "../_shared/logging.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
 import {
+  challengeEnded,
   isValidCompUrl,
   isValidEmail,
   isAllowedPath,
@@ -106,13 +107,14 @@ Deno.serve(async (req) => {
     const supabase = getAdminClient();
     const settingsRes = await supabase
       .from("challenge_settings")
-      .select("status, offers_paused, current_trade_number, current_item_name, current_item_value")
+      .select("status, offers_paused, end_at, current_trade_number, current_item_name, current_item_value")
       .eq("id", 1)
       .maybeSingle();
     if (settingsRes.error) throw settingsRes.error;
     const settings = settingsRes.data as {
       status?: string;
       offers_paused?: boolean;
+      end_at?: string | null;
       current_trade_number?: number;
       current_item_name?: string;
       current_item_value?: number | string;
@@ -125,6 +127,11 @@ Deno.serve(async (req) => {
     }
     if (settings.status !== "active") {
       return json({ error: "Offers open when the challenge starts." }, 409, cors);
+    }
+    // Prompt 30: at completion offers close by default — including the
+    // moment the 21-day clock runs out (stored status flips later).
+    if (challengeEnded(settings, Date.now())) {
+      return json({ error: "The challenge has ended — offers are closed." }, 409, cors);
     }
 
     const currentTradeNumber = Number(settings.current_trade_number ?? 0);

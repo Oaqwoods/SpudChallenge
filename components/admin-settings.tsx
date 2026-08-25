@@ -15,11 +15,15 @@ import {
   type ChallengeSettings,
 } from "@/lib/challenge";
 import {
+  buildPauseUpdate,
   buildSettingsUpdate,
   canStartChallenge,
   computeLaunchWindow,
   draftFromSettings,
+  pauseDraftFromSettings,
+  PUBLIC_NOTICE_MAX,
   validateSettingsDraft,
+  type PauseDraft,
   type SettingsDraft,
 } from "@/lib/admin-settings";
 import { formatDateTime } from "@/lib/time";
@@ -80,15 +84,20 @@ function Field({
 export function AdminSettings() {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [draft, setDraft] = useState<SettingsDraft | null>(null);
+  const [pauseDraft, setPauseDraft] = useState<PauseDraft | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pauseBusy, setPauseBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const now = useNow(30000);
 
   const refresh = useCallback(async () => {
     const next = await fetchSettings();
     setState(next);
-    if (next.phase === "ready") setDraft(draftFromSettings(next.settings));
+    if (next.phase === "ready") {
+      setDraft(draftFromSettings(next.settings));
+      setPauseDraft(pauseDraftFromSettings(next.settings));
+    }
   }, []);
 
   useEffect(() => {
@@ -97,7 +106,10 @@ export function AdminSettings() {
       const next = await fetchSettings();
       if (cancelled) return;
       setState(next);
-      if (next.phase === "ready") setDraft(draftFromSettings(next.settings));
+      if (next.phase === "ready") {
+        setDraft(draftFromSettings(next.settings));
+        setPauseDraft(pauseDraftFromSettings(next.settings));
+      }
     };
     void initialLoad();
     return () => {
@@ -150,6 +162,33 @@ export function AdminSettings() {
     }
     setConfirmStart(false);
     setNotice({ tone: "ok", text: "Challenge started. It is now live with a 21-day clock." });
+    await refresh();
+  };
+
+  // Prompt 30: pause/resume + public notice. Writes ONLY these three
+  // columns — the challenge clock is never touched by a pause.
+  const savePauses = async () => {
+    if (state.phase !== "ready" || !pauseDraft) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+    setPauseBusy(true);
+    setNotice(null);
+    const { error } = await supabase
+      .from("challenge_settings")
+      .update(buildPauseUpdate(pauseDraft))
+      .eq("id", 1);
+    setPauseBusy(false);
+    if (error) {
+      setNotice({ tone: "error", text: `Could not save pause settings — ${error.message}` });
+      return;
+    }
+    const pausedAnything = pauseDraft.offers_paused || pauseDraft.follower_signups_paused;
+    setNotice({
+      tone: "ok",
+      text: pausedAnything
+        ? "Saved. The selected signups are paused immediately (the clock keeps running)."
+        : "Saved. All public signups are open again.",
+    });
     await refresh();
   };
 
@@ -249,6 +288,86 @@ export function AdminSettings() {
             {settings.start_at ? ` is ${formatDateTime(settings.start_at)}` : " is not set yet"}.
           </p>
         )}
+      </Panel>
+
+      <Panel className="mt-4 p-6">
+        <p className={labelClass}>Pauses &amp; public notice</p>
+        <p className="mt-3 text-xs leading-relaxed text-faded">
+          Emergency controls for a live challenge. Pausing closes the public
+          form immediately and never alters the challenge clock — time keeps
+          running. Uncheck both boxes and save to resume.
+        </p>
+        {pauseDraft ? (
+          <div className="mt-4 flex flex-col gap-4">
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={pauseDraft.offers_paused}
+                onChange={(e) =>
+                  setPauseDraft({ ...pauseDraft, offers_paused: e.target.checked })
+                }
+                className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+              />
+              <span>
+                Pause new trade offers
+                {pauseDraft.offers_paused ? (
+                  <span className="ml-2 border border-alert px-1.5 py-0.5 font-display text-[7px] uppercase text-alert">
+                    paused now
+                  </span>
+                ) : null}
+                <span className="mt-1 block text-xs text-faded">
+                  The offer form shows a “paused” message; the server rejects
+                  new offers and uploads.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={pauseDraft.follower_signups_paused}
+                onChange={(e) =>
+                  setPauseDraft({ ...pauseDraft, follower_signups_paused: e.target.checked })
+                }
+                className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+              />
+              <span>
+                Pause follower signups
+                {pauseDraft.follower_signups_paused ? (
+                  <span className="ml-2 border border-alert px-1.5 py-0.5 font-display text-[7px] uppercase text-alert">
+                    paused now
+                  </span>
+                ) : null}
+                <span className="mt-1 block text-xs text-faded">
+                  The follow form shows a “paused” message; the server rejects
+                  new signups.
+                </span>
+              </span>
+            </label>
+            <Field id="cs-public-notice" label={`Public notice (optional, max ${PUBLIC_NOTICE_MAX} characters — shown in the homepage hero)`}>
+              <textarea
+                id="cs-public-notice"
+                rows={2}
+                className={inputClass}
+                value={pauseDraft.public_notice}
+                maxLength={PUBLIC_NOTICE_MAX}
+                placeholder="e.g. Offers are briefly paused for travel — back soon."
+                onChange={(e) =>
+                  setPauseDraft({ ...pauseDraft, public_notice: e.target.value })
+                }
+              />
+            </Field>
+            <div>
+              <button
+                type="button"
+                disabled={pauseBusy}
+                onClick={() => void savePauses()}
+                className={saveButtonClass}
+              >
+                {pauseBusy ? "Saving…" : "Save pause settings"}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </Panel>
 
       <form
@@ -384,8 +503,8 @@ export function AdminSettings() {
             {busy ? "Saving…" : "Save settings"}
           </button>
           <p className="text-[11px] text-faded">
-            Saving updates the public site immediately. Pause controls are not
-            part of this screen yet.
+            Saving updates the public site immediately. This form never
+            touches the pause switches above.
           </p>
         </div>
       </form>

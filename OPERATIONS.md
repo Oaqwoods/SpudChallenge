@@ -71,26 +71,35 @@ Function items marked **[deploy]**.
 
 ## If something needs a pause
 
-- Urgent break (safety, dispute, travel): set `offers_paused` and/or
-  `follower_signups_paused` in the DB and optionally `public_notice`
-  (shown in the hero). The clock keeps running — pauses never extend time.
-  Admin pause buttons are planned (playbook prompt 30); until then use the
-  SQL editor.
+- Urgent break (safety, dispute, travel): open **Admin → Launch controls →
+  Pauses & public notice**. Check **Pause new trade offers** and/or **Pause
+  follower signups**, optionally add a public notice (shown in the homepage
+  hero), and save. Both forms show the paused state immediately and the
+  server rejects new submissions; uncheck and save to resume. The clock
+  keeps running — pauses never extend time.
 
 ## Day 21 — completion
 
 1. The phase flips to complete automatically when `end_at` passes (or set
-   status `complete` in Launch controls to end early).
+   status `complete` in Launch controls to end early). New offers are
+   rejected server-side from the moment `end_at` passes; if a meetup
+   finishes right at the deadline you can still publish that final trade
+   until you end the challenge explicitly.
 2. Final stats render automatically: final value, multiplier, trade count,
-   goal verdict. Offer and follower forms close themselves.
-3. Send a final wrap-up broadcast from `/admin/emails/` if you want one.
-4. Legal/recordkeeping: export the records with the built-in admin CSV
+   goal verdict. The offer form closes itself; follower signups stay open
+   unless you pause them in Launch controls.
+3. When every trade is published, set the stored status to `complete` in
+   Launch controls — this **freezes the trade order**: new publishes are
+   rejected (corrections via Trades → Edit still work), and the archive
+   stays available in the admin.
+4. Send a final wrap-up broadcast from `/admin/emails/` if you want one.
+5. Legal/recordkeeping: export the records with the built-in admin CSV
    buttons — **Export offers CSV** on the dashboard, **Export followers CSV**
    on the Followers page, **Export trades CSV** on the Trades page. Each
    downloads a dated `.csv` (private columns included — contact data, admin
    notes, BTC verification fields) generated entirely in your browser; store
    the files somewhere safe.
-5. Attorney review of Terms/Privacy placeholders before relying on them.
+6. Attorney review of Terms/Privacy placeholders before relying on them.
 
 ## Optional: turn on CAPTCHA (off by default)
 
