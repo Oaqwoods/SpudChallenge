@@ -121,6 +121,11 @@ export function CountdownSection() {
                 Starts {formatDateTime(s.start_at)}
               </p>
             ) : null}
+            {label === "Time Remaining" && s.end_at ? (
+              <p className="mt-3 text-center text-xs text-faded">
+                Challenge ends {formatDateTime(s.end_at)}
+              </p>
+            ) : null}
           </div>
         )}
       </div>
