@@ -5,8 +5,9 @@ import { useNow } from "@/hooks/use-now";
 import { track } from "@/lib/analytics";
 import { getPhase } from "@/lib/challenge";
 
+// retro-shadow + active press gives the buttons a tactile console feel.
 const baseButton =
-  "inline-flex items-center justify-center border-[3px] px-5 py-4 font-display text-[10px] uppercase tracking-wider transition-colors sm:text-xs";
+  "retro-shadow inline-flex items-center justify-center border-[3px] px-5 py-4 font-display text-[10px] uppercase tracking-wider transition-all active:translate-x-[3px] active:translate-y-[3px] active:shadow-none sm:text-xs";
 
 const primary = "border-accent bg-accent text-black hover:bg-transparent hover:text-accent";
 const secondary = "border-accent text-accent hover:bg-accent hover:text-black";

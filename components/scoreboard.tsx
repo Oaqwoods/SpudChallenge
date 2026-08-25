@@ -36,11 +36,11 @@ export function ScoreboardSection() {
       <SectionHeading>Scoreboard</SectionHeading>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {stats.map(([label, value]) => (
-          <Panel key={label} className="px-3 py-4 text-center">
+          <Panel key={label} className="retro-shadow px-3 py-4 text-center">
             <p className="font-display text-[8px] uppercase text-faded sm:text-[9px]">{label}</p>
             <p
               className={`mt-2 font-display text-xs sm:text-sm ${
-                label === "Current Value" ? "text-accent" : "text-mint"
+                label === "Current Value" ? "pixel-glow text-accent" : "text-mint"
               }`}
             >
               {value}

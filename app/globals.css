@@ -29,6 +29,37 @@ body {
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Retro game feel (playbook PROMPT 35): hard offset shadows like old
+   console UI, a soft arcade glow for display numbers, and a gentle blink
+   for the status marker. Blink respects prefers-reduced-motion. */
+.retro-shadow {
+  box-shadow: 4px 4px 0 0 #000;
+}
+
+.pixel-glow {
+  text-shadow: 0 0 10px rgba(255, 210, 63, 0.4);
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.blink {
+  animation: blink 1.2s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blink {
+    animation: none;
+  }
+}
+
 /* Subtle CRT scanline texture for the hero. Static — no animation. */
 .scanlines {
   position: relative;
