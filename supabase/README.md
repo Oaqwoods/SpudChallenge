@@ -16,6 +16,7 @@ exception).
 | `20260820000008_analytics_events.sql` | `analytics_events` privacy-light telemetry table (event allowlist constraint, admin-read RLS; playbook PROMPT 14 / spec §13) |
 | `20260821000009_seed_initial_challenge.sql` | PROMPT 19 safe seed guard: inserts the canonical prelaunch row if missing, never overwrites an existing admin-owned row, leaves `start_at`/`end_at` NULL and verifies the effective initial state |
 | `20260823000010_offer_transition_guard.sql` | Offer state-machine trigger: rejects any status UPDATE outside the allowed transition matrix, stamps `meetup_scheduled_at` when a meetup is scheduled (playbook PROMPT 25 / spec §25) |
+| `20260825000011_app_admins_read_grants.sql` | Grants `SELECT` on `app_admins` to `authenticated` + `service_role` — the membership-probe target that migration 2 gave an RLS policy but no table grant, so every probe 401'd (code 42501) even for valid admin sessions. RLS unchanged, no write policies added |
 
 ## Applying the migrations
 
@@ -26,7 +27,7 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-**Option B — Dashboard SQL Editor:** paste and run the ten files in
+**Option B — Dashboard SQL Editor:** paste and run the eleven files in
 timestamp order, one at a time.
 
 ## Access model (RLS)
