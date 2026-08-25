@@ -21,9 +21,6 @@ export function Hero() {
         <p className="font-display text-[9px] uppercase tracking-widest text-faded sm:text-[10px]">
           A Trade Challenge by Spud
         </p>
-        <p className="font-display text-xs uppercase tracking-widest text-mint sm:text-sm">
-          {s.title}
-        </p>
         <h1 className="pixel-glow font-display leading-tight text-accent">
           <span className="block text-3xl sm:inline sm:text-4xl">$1 →</span>{" "}
           <span className="mt-2 block text-3xl sm:mt-0 sm:inline sm:text-4xl">
