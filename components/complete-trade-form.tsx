@@ -368,7 +368,7 @@ export function CompleteTradeForm({ offerId }: { offerId: string }) {
       className="flex flex-col gap-6"
     >
       <Panel className="p-4">
-        <p className={labelClass}>Completing offer from</p>
+        <p className={labelClass}>Step 1 · Completing offer</p>
         <p className="mt-2 font-display text-xs text-accent">{offer.item_name}</p>
         <p className="mt-1 text-xs text-faded">
           Claimed {formatUsd(offer.claimed_value)} · {offer.name} · {offer.city}, {offer.state}
@@ -376,7 +376,11 @@ export function CompleteTradeForm({ offerId }: { offerId: string }) {
       </Panel>
 
       <Panel className="p-4">
-        <p className={labelClass}>What changed hands</p>
+        <p className={labelClass}>Step 2 · What changed hands (public)</p>
+        <p className="mt-1 text-xs text-faded">
+          Items and values appear on the public site and become the challenge
+          record.
+        </p>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
           <Field label="Item given away (required)">
             <input className={inputClass} value={outgoingItem} maxLength={200}
@@ -404,13 +408,13 @@ export function CompleteTradeForm({ offerId }: { offerId: string }) {
       </Panel>
 
       <Panel className="p-4">
-        <p className={labelClass}>Valuation, time and place</p>
+        <p className={labelClass}>Step 3 · Valuation, time &amp; place</p>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
-          <Field label="Valuation method (required)">
+          <Field label="Public valuation note / method (required)">
             <input className={inputClass} value={valuationMethod} maxLength={200}
               placeholder="e.g. comparable sold listings" onChange={(e) => setValuationMethod(e.target.value)} />
           </Field>
-          <Field label="Valuation evidence (optional — makes valuation verified)">
+          <Field label="Valuation evidence (optional — private; makes the valuation verified)">
             <input className={inputClass} value={valuationEvidence} maxLength={500}
               placeholder="link or summary" onChange={(e) => setValuationEvidence(e.target.value)} />
           </Field>
@@ -426,7 +430,7 @@ export function CompleteTradeForm({ offerId }: { offerId: string }) {
       </Panel>
 
       <Panel className="border-accent p-4">
-        <p className="font-display text-[9px] uppercase text-accent">Public content</p>
+        <p className="font-display text-[9px] uppercase text-accent">Step 4 · Public content</p>
         <p className="mt-1 text-xs text-faded">
           Everything in this block can appear on the public site.
         </p>
@@ -484,7 +488,7 @@ export function CompleteTradeForm({ offerId }: { offerId: string }) {
       </Panel>
 
       <Panel className="border-alert p-4">
-        <p className="font-display text-[9px] uppercase text-alert">Private — never published</p>
+        <p className="font-display text-[9px] uppercase text-alert">Step 5 · Private — never published</p>
         <div className="mt-3 grid gap-4">
           <Field label="Private completion notes (exact meetup details, logistics)">
             <textarea rows={3} className={inputClass} value={privateNotes} maxLength={4000}
@@ -498,7 +502,7 @@ export function CompleteTradeForm({ offerId }: { offerId: string }) {
       </Panel>
 
       <Panel className="p-4">
-        <p className={labelClass}>Bitcoin exception</p>
+        <p className={labelClass}>Step 6 · Bitcoin exception (private recordkeeping)</p>
         <p className="mt-1 text-xs text-faded">
           Only when the incoming or outgoing asset is Bitcoin. The recorded
           USD fair-market value becomes the frozen public challenge value for
@@ -553,15 +557,20 @@ export function CompleteTradeForm({ offerId }: { offerId: string }) {
         </div>
       </Panel>
 
-      <Panel className="p-4">
-        <p className={labelClass}>Public preview</p>
+      <Panel className="border-mint p-4">
+        <p className="font-display text-[9px] uppercase text-mint">Step 7 · Preview &amp; publish</p>
+        <p className="mt-1 text-xs text-faded">
+          Exactly what the public trade card and current item will show —
+          private notes, evidence and wallet details are never rendered here.
+        </p>
         <div className="mt-3 border-[3px] border-edge bg-background p-4">
           <p className="font-display text-[10px] text-accent">
             TRADE #{nextTradeNumber}: {Number.isFinite(outgoingNum) ? formatUsd(outgoingNum) : "$?"} →{" "}
             {Number.isFinite(incomingNum) ? formatUsd(incomingNum) : "$?"}
           </p>
           <p className="mt-2 font-display text-xs text-foreground">
-            {incomingItem.trim() || "Item received"}
+            Gave {outgoingItem.trim() || "item given"} · Received{" "}
+            {incomingItem.trim() || "item received"}
           </p>
           <p className="mt-1 text-xs text-faded">
             {generalLocation.trim() || "General location"} ·{" "}
@@ -571,41 +580,45 @@ export function CompleteTradeForm({ offerId }: { offerId: string }) {
           {publicStory.trim() ? (
             <p className="mt-2 text-sm leading-relaxed text-foreground">{publicStory}</p>
           ) : null}
+          {participantName.trim() ? (
+            <p className="mt-2 text-xs text-faded">Traded with {participantName.trim()}</p>
+          ) : null}
           {photos.length > 0 ? (
             <p className="mt-2 text-xs text-faded">{photos.length} public image(s) attached.</p>
           ) : null}
         </div>
         <p className="mt-2 text-xs text-faded">
-          This is what the public trade card / current item will show. The
-          homepage updates automatically on publish — no code edits.
+          The homepage current item and the journey update automatically on
+          publish — no code edits. A draft email is prepared after publish;
+          nothing is auto-emailed.
         </p>
+
+        <div className="mt-4 flex flex-col gap-3">
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1 accent-accent" checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)} />
+            I confirm the real-world/legal transfer has actually completed (or
+            otherwise qualifies under the challenge rules).
+          </label>
+
+          {message ? (
+            <p role="alert" className="border-[3px] border-alert px-3 py-2 text-sm text-alert">
+              {message}
+            </p>
+          ) : null}
+
+          <button type="submit" disabled={publishing}
+            className="retro-shadow border-[3px] border-accent bg-accent px-5 py-4 font-display text-[10px] uppercase tracking-wider text-black transition-all hover:bg-transparent hover:text-accent active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-not-allowed disabled:opacity-60 sm:text-xs">
+            {publishing ? "Publishing…" : `Publish trade #${nextTradeNumber}`}
+          </button>
+
+          <p className="text-xs leading-relaxed text-faded">
+            Publishing is a single all-or-nothing operation: the trade record,
+            public images, current-item update, offer completion and a draft
+            email are written together, or not at all.
+          </p>
+        </div>
       </Panel>
-
-      <div className="flex flex-col gap-2 border-[3px] border-edge p-3 text-sm">
-        <label className="flex items-start gap-2">
-          <input type="checkbox" className="mt-1 accent-accent" checked={confirmed}
-            onChange={(e) => setConfirmed(e.target.checked)} />
-          I confirm the real-world/legal transfer has actually completed (or
-          otherwise qualifies under the challenge rules).
-        </label>
-      </div>
-
-      {message ? (
-        <p role="alert" className="border-[3px] border-alert px-3 py-2 text-sm text-alert">
-          {message}
-        </p>
-      ) : null}
-
-      <button type="submit" disabled={publishing}
-        className="border-[3px] border-accent bg-accent px-5 py-4 font-display text-[10px] uppercase tracking-wider text-black transition-colors hover:bg-transparent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60 sm:text-xs">
-        {publishing ? "Publishing…" : `Publish trade #${nextTradeNumber}`}
-      </button>
-
-      <p className="text-xs leading-relaxed text-faded">
-        Publishing is a single all-or-nothing operation: the trade record,
-        public images, current-item update, offer completion and a draft email
-        are written together, or not at all. Nothing is auto-emailed.
-      </p>
     </form>
   );
 }
