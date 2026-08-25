@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function AdminResetPasswordPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-16">
-      <p className="font-display text-xs text-accent">ONE → FIVE · ADMIN</p>
+      <p className="font-display text-xs text-accent">$1 → $5M · ADMIN</p>
       <div className="mt-6">
         <AdminResetPasswordForm />
       </div>

@@ -97,7 +97,7 @@ export function buildConfirmation(opts: {
   const url = siteUrl();
   const subject = opts.emailUpdates
     ? "You're following $1 → $5M"
-    : "ONE → FIVE — we'll let you know when trades open";
+    : "$1 → $5M — we'll let you know when trades open";
 
   const parts: string[] = [
     `<p>We started with one dollar. We can only trade what we currently have. No adding cash to a trade. The clock never resets.</p>`,
@@ -114,7 +114,7 @@ export function buildConfirmation(opts: {
   }
   parts.push(
     `<p><a href="${escapeHtml(url)}">Follow the challenge →</a></p>`,
-    `<p style="color:#666;font-size:12px;">ONE → FIVE · $1 → $5,000,000 in 21 Days · A Trade Challenge by Spud</p>`,
+    `<p style="color:#666;font-size:12px;">$1 → $5M · 21 Days. Only Trades. · A Trade Challenge by Spud</p>`,
   );
   if (opts.unsubscribeUrl) {
     parts.push(

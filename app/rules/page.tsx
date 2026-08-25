@@ -6,7 +6,7 @@ import { Panel } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Public Rules",
-  description: "The public rules of the ONE → FIVE 21-day trade challenge.",
+  description: "The public rules of the $1 → $5M 21-day trade challenge.",
   alternates: { canonical: "/rules/" },
 };
 

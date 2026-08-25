@@ -175,7 +175,7 @@ export function AdminArea({ children }: { children: ReactNode }) {
     <AdminSessionContext.Provider value={sessionValue}>
       <header className="sticky top-0 z-20 border-b-[3px] border-edge bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
-          <p className="font-display text-xs text-accent">ONE → FIVE · ADMIN</p>
+          <p className="font-display text-xs text-accent">$1 → $5M · ADMIN</p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <span className="max-w-[40vw] truncate text-[11px] text-faded">{check.email}</span>
             <Link href="/" className="text-[11px] text-faded underline hover:text-accent">

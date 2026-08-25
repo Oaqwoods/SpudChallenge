@@ -30,7 +30,7 @@ export function formatUsdForShare(value: number): string {
 // sheet. Emphasizes the $1 → $5M framing and the current trade number.
 export function buildShareTitle(state: ShareState): string {
   if (state.phase === "prelaunch") {
-    return `ONE → FIVE: ${formatUsdForShare(state.startingValue)} → ${formatUsdForShare(state.targetValue)} in 21 days`;
+    return `$1 → $5M in 21 days. Only trades.`;
   }
   return `Trade #${state.tradeNumber}: now holding ${state.currentItemName} (${formatUsdForShare(state.currentValue)})`;
 }
@@ -38,15 +38,14 @@ export function buildShareTitle(state: ShareState): string {
 // Message body for copy-link, email and the native share sheet. Carries
 // the challenge framing, current item/value, trade number and time left.
 export function buildShareText(state: ShareState): string {
-  const goal = `${formatUsdForShare(state.startingValue)} → ${formatUsdForShare(state.targetValue)} in 21 days`;
   if (state.phase === "prelaunch") {
-    return `ONE → FIVE — ${goal}. Only trades, no added cash, and the clock never resets. Follow every trade from day one.`;
+    return `$1 → $5M in 21 days. Only trades, no added cash, and the clock never resets. Follow every trade from day one.`;
   }
   const timeLeft = state.timeRemainingLabel ?? "Time remaining: TBA";
   if (state.phase === "complete") {
-    return `ONE → FIVE — the 21-day ${goal} challenge is complete. Final item: ${state.currentItemName} at ${formatUsdForShare(state.currentValue)} after ${state.tradeNumber} trades.`;
+    return `$1 → $5M — the 21-day challenge is complete. Final item: ${state.currentItemName} at ${formatUsdForShare(state.currentValue)} after ${state.tradeNumber} trades.`;
   }
-  return `ONE → FIVE — ${goal}. Trade #${state.tradeNumber} done: now holding ${state.currentItemName} worth ${formatUsdForShare(state.currentValue)}. ${timeLeft} left.`;
+  return `$1 → $5M — Trade #${state.tradeNumber} done: now holding ${state.currentItemName} worth ${formatUsdForShare(state.currentValue)}. ${timeLeft} left.`;
 }
 
 export function xShareUrl(siteUrl: string, text: string): string {

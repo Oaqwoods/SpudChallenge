@@ -12,7 +12,7 @@ export function Header() {
       <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
         <div className="flex items-baseline gap-3">
           <a href="#top" className="font-display text-xs text-accent sm:text-sm">
-            ONE → FIVE
+            $1 → $5M
           </a>
           <span className="hidden text-[11px] text-faded md:inline">
             A Trade Challenge by Spud

@@ -57,7 +57,7 @@ export function UnsubscribeTool() {
   return (
     <Panel className="mt-6 p-5">
       <p className="text-sm leading-relaxed text-foreground">
-        Unsubscribe <span className="text-accent">{email}</span> from ONE → FIVE
+        Unsubscribe <span className="text-accent">{email}</span> from $1 → $5M
         completed-trade emails?
       </p>
       {status === "error" ? (

@@ -4,7 +4,7 @@ import { Panel } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "Privacy policy for the ONE → FIVE 21-day trade challenge.",
+  description: "Privacy policy for the $1 → $5M 21-day trade challenge.",
   alternates: { canonical: "/privacy/" },
 };
 

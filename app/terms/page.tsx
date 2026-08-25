@@ -4,7 +4,7 @@ import { Panel } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Terms of Participation",
-  description: "Terms of Participation for the ONE → FIVE 21-day trade challenge.",
+  description: "Terms of Participation for the $1 → $5M 21-day trade challenge.",
   alternates: { canonical: "/terms/" },
 };
 
@@ -43,7 +43,7 @@ export default function TermsPage() {
       <Panel className="mt-6 p-5">
         <Section title="What this is">
           <p>
-            ONE → FIVE is a promotional 21-day trade challenge run by the site
+            $1 → $5M is a promotional 21-day trade challenge run by the site
             operator (“we”). We start with $1 and attempt to trade up to
             $5,000,000 in 21 days by trading only what we currently own.
             Participation happens by submitting trade offers through this site;

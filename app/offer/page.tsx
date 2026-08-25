@@ -7,7 +7,7 @@ import { OfferForm } from "@/components/offer-form";
 export const metadata: Metadata = {
   title: "I Have Something Better",
   description:
-    "Offer a trade for the current ONE → FIVE challenge item. Submission is not acceptance.",
+    "Offer a trade for the current $1 → $5M challenge item. Submission is not acceptance.",
   alternates: { canonical: "/offer/" },
 };
 

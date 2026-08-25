@@ -93,7 +93,7 @@ export function buildTradeEmail(input: TradeEmailInput): {
     : "";
 
   const body_html = [
-    `<p style="color:#ece9e2;font-size:13px;letter-spacing:2px;">ONE → FIVE · TRADE #${input.tradeNumber} COMPLETE</p>`,
+    `<p style="color:#ece9e2;font-size:13px;letter-spacing:2px;">$1 → $5M · TRADE #${input.tradeNumber} COMPLETE</p>`,
     `<p style="color:#ece9e2;">We traded <strong>${escapeHtml(input.outgoingItem)}</strong> (${formatUsdForEmail(input.outgoingValue)}) for <strong>${escapeHtml(input.incomingItem)}</strong> (${formatUsdForEmail(input.incomingValue)}).</p>`,
     image,
     story,

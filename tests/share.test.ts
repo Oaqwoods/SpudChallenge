@@ -23,10 +23,10 @@ function state(overrides: Partial<ShareState> = {}): ShareState {
   };
 }
 
-test("buildShareTitle leads with the challenge framing prelaunch, trade number when active", () => {
+test("buildShareTitle leads with the $1 → $5M framing prelaunch, trade number when active", () => {
   assert.equal(
     buildShareTitle(state({ phase: "prelaunch" })),
-    "ONE → FIVE: $1 → $5,000,000 in 21 days",
+    "$1 → $5M in 21 days. Only trades.",
   );
   assert.equal(
     buildShareTitle(state()),
@@ -34,9 +34,9 @@ test("buildShareTitle leads with the challenge framing prelaunch, trade number w
   );
 });
 
-test("buildShareText emphasizes goal, current item/value, trade number and time left", () => {
+test("buildShareText emphasizes brand, current item/value, trade number and time left", () => {
   const text = buildShareText(state());
-  assert.ok(text.includes("$1 → $5,000,000 in 21 days"));
+  assert.ok(text.includes("$1 → $5M"));
   assert.ok(text.includes("Trade #5"));
   assert.ok(text.includes("Watch"));
   assert.ok(text.includes("$1,400"));
@@ -45,10 +45,12 @@ test("buildShareText emphasizes goal, current item/value, trade number and time 
 
 test("buildShareText handles prelaunch and complete phases", () => {
   const prelaunch = buildShareText(state({ phase: "prelaunch" }));
-  assert.ok(prelaunch.includes("ONE → FIVE"));
+  assert.ok(prelaunch.includes("$1 → $5M"));
+  assert.ok(prelaunch.includes("21 days"));
   assert.ok(!prelaunch.includes("Trade #"));
 
   const complete = buildShareText(state({ phase: "complete", timeRemainingLabel: null }));
+  assert.ok(complete.includes("$1 → $5M"));
   assert.ok(complete.includes("complete"));
   assert.ok(complete.includes("after 5 trades"));
 });
