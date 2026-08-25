@@ -234,3 +234,31 @@ Live-verified behaviors: apex serves all routes over HTTPS, bare paths
 301-upgrade to trailing slashes, `https://www.spudchallenge.online/`
 301-redirects to the apex, and the admin area loads (authorization still
 happens server-side).
+
+---
+
+## Addendum — PROMPT 33 email consent / duplicate audit (2026-08-25)
+
+Point-in-time audit of the email-preference logic against every prompt-33
+requirement (the three independent-choice options plus all seven audit
+bullets). **Result: everything already implemented — no code changes
+needed.** Evidence below, verified by reading the actual files.
+
+| Requirement | Verdict | Evidence |
+| --- | --- | --- |
+| Independent choice of ongoing emails / trade interest / both | ✅ | Two separate boolean columns (`email_updates_opt_in`, `trade_interest`) with `followers_at_least_one_intent` requiring at least one (migration 1); follow-signup writes each flag independently from the request |
+| Duplicate submissions update, never duplicate | ✅ | follow-signup reads by normalized email first and UPDATEs the existing row (never a second INSERT); the `followers_email_key` unique constraint makes duplication impossible even under a race |
+| No silent opt-in to ongoing emails via trade interest | ✅ | The duplicate-update path sets `email_updates_opt_in` only when the ongoing box is checked; `trade_interest` alone updates only `trade_interest` + its timestamp; audience types are resolved separately (`resolveAudience`) |
+| Ongoing broadcasts include only active opted-in followers | ✅ | send-broadcast fetches the audience with `.eq("email_updates_opt_in", true)` AND `.is("email_updates_unsubscribed_at", null)`; `resolveAudience` re-applies both filters; locked by `tests/broadcast.test.ts` |
+| Unsubscribe disables ongoing updates and removes wall eligibility | ✅ | email-preferences sets `email_updates_opt_in: false` + stamps `email_updates_unsubscribed_at`; `public_follower_wall` requires `email_updates_opt_in AND unsubscribed_at IS NULL AND public_wall_opt_in AND public_visible` (migration 2); admin-side mirror logic tested (`isOnWall`/`wallStatus` in `tests/admin-followers.test.ts`) |
+| No duplicate launch emails when both flags are true | ✅ | Email is unique per person, so the `'all'` audience fetches each row once and `resolveAudience` de-duplicates case-insensitively (test: "segments trade interest and unions 'all', deduplicated"); the signup confirmation email is sent once per submission, covering both choices in one message; broadcast retries skip addresses already logged `sent` in `email_broadcast_recipients` |
+| Preference timestamps preserved | ✅ | Duplicate updates use `existing.email_updates_opted_in_at ?? now` / `existing.trade_interest_at ?? now` — original opt-in times survive re-submissions; an explicit resubscribe clears `unsubscribed_at` and the next unsubscribe stamps a fresh one |
+| Public follower count reflects active ongoing followers only | ✅ | `public_follower_count` counts exactly `email_updates_opt_in = true AND email_updates_unsubscribed_at IS NULL` (migration 2) |
+
+### Verification runs (2026-08-25)
+
+| Check | Result |
+| --- | --- |
+| `npm test` | 155/155 pass |
+| `npx tsc --noEmit` | clean |
+| `npm run build` (static export) | clean |
