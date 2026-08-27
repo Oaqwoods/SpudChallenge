@@ -229,23 +229,30 @@ export const OFFER_TRANSITIONS: Record<OfferStatus, readonly OfferStatus[]> = {
 
 // Prompt 39 / spec §17A: prelaunch offers are COLLECTED ONLY. While the
 // challenge has not been started, offers are frozen at their current status
-// — no selecting, shortlisting, or even declining. The whole ladder unlocks
-// when START CHALLENGE NOW flips the status to active. An unknown or absent
-// challenge status fails closed (locked); the database trigger (migration
-// 17) enforces the same freeze server-side.
+// — no selecting, shortlisting, or declining. The whole ladder unlocks when
+// START CHALLENGE NOW flips the status to active. An unknown or absent
+// challenge status fails closed (locked); the database trigger (migrations
+// 17/18) enforces the same freeze server-side.
 export function offersLockedBeforeLaunch(challengeStatus: string | null | undefined): boolean {
   return challengeStatus !== "active" && challengeStatus !== "complete";
 }
 
+// The one action that survives the prelaunch freeze (owner decision):
+// blatant spam may still be marked invalid before launch. `invalid` is
+// terminal, so a prelaunch spam exit can never re-enter the trade workflow.
+export function isPrelaunchSpamTriage(from: OfferStatus, to: OfferStatus): boolean {
+  return from === "new" && to === "invalid";
+}
+
 // `challengeStatus` defaults to locked: a caller that does not know the
-// challenge phase offers no transitions at all.
+// challenge phase offers nothing except prelaunch spam triage.
 export function canTransition(
   from: OfferStatus,
   to: OfferStatus,
   challengeStatus: string | null = null,
 ): boolean {
   if (from === to) return false;
-  if (offersLockedBeforeLaunch(challengeStatus)) return false;
+  if (offersLockedBeforeLaunch(challengeStatus)) return isPrelaunchSpamTriage(from, to);
   return OFFER_TRANSITIONS[from].includes(to);
 }
 

@@ -404,8 +404,9 @@ export function AdminDashboard() {
         {settings.status === "prelaunch" ? (
           <p className="mt-4 border-[3px] border-accent bg-panel px-3 py-2 text-xs leading-relaxed text-accent">
             Prelaunch: offers below are collected only and stay frozen at their
-            current status. Workflow actions unlock once you START CHALLENGE
-            NOW — collecting offers never starts the clock.
+            current status — the only action available is marking blatant spam
+            invalid on the offer page. Everything else unlocks once you START
+            CHALLENGE NOW. Collecting offers never starts the clock.
           </p>
         ) : null}
 

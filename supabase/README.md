@@ -22,7 +22,8 @@ exception).
 | `20260825000014_trade_documents_storage.sql` | Valuation recordkeeping (playbook PROMPT 29 / spec §8.6): private `trade-documents` storage bucket for admin-added verification documents (signed receipts, agreements, professional verification) referenced by the existing `trade_documents` table — admin-only storage policies, 10 MB bucket cap, no anon access, never exposed through any public view |
 | `20260825000015_publish_freeze_on_complete.sql` | Pause/archive safety (playbook PROMPT 30): re-issues `publish_trade` with a completion guard — once the stored challenge status is `complete` the trade order is frozen and new publishes raise (idempotent replays and `update_published_trade` corrections still work). Pairs with the `challengeEnded` checks in submit-offer/offer-upload that close offers the moment `end_at` passes |
 | `20260825000016_start_challenge_now.sql` | START CHALLENGE NOW (playbook PROMPT 32): `start_challenge_now()` RPC — the authoritative, confirmation-gated launch. Stamps `start_at` with the **database** clock (never the admin browser), sets `end_at` to exactly `start_at + 21 days` from one transaction timestamp, flips `prelaunch → active`, and rejects repeated/duplicate starts atomically (settings row `FOR UPDATE` + status/`start_at` guard). Manual future scheduling stays the admin settings form |
-| `20260827000017_prelaunch_offer_freeze.sql` | Prelaunch Trade #1 collection (playbook PROMPT 39 / spec §17A): extends the migration-10 transition trigger so that while the challenge status is `prelaunch`, every offer status change is rejected — prelaunch offers are collected only and stay frozen until START CHALLENGE NOW unlocks the normal workflow. No new columns: `created_at < start_at` identifies prelaunch offers |
+| `20260827000017_prelaunch_offer_freeze.sql` | Prelaunch Trade #1 collection (playbook PROMPT 39 / spec §17A): extends the migration-10 transition trigger so that while the challenge status is `prelaunch`, every offer status change is rejected — prelaunch offers are collected only and stay frozen until START CHALLENGE NOW unlocks the normal workflow. No new columns: `created_at < start_at` identifies prelaunch offers. Spam exception added by migration 18 |
+| `20260827000018_prelaunch_spam_exception.sql` | Prelaunch spam triage (PROMPT 39 follow-up): re-issues the transition trigger so exactly one action stays available before launch — `new -> invalid` for blatant spam. `invalid` is terminal, so a prelaunch spam exit can never re-enter the trade workflow; everything else remains frozen until START CHALLENGE NOW |
 
 ## Applying the migrations
 
@@ -33,7 +34,7 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-**Option B — Dashboard SQL Editor:** paste and run the seventeen files in
+**Option B — Dashboard SQL Editor:** paste and run the eighteen files in
 timestamp order, one at a time.
 
 ## Access model (RLS)

@@ -322,24 +322,48 @@ test("offersLockedBeforeLaunch locks prelaunch and fails closed", () => {
 });
 
 test("prelaunch freeze: admin cannot select/complete/publish before the challenge starts", () => {
-  // No transition at all out of a collected prelaunch offer — not even
-  // reviewing/shortlisting, and never selected/completed/published.
+  // No transition out of a collected prelaunch offer — not even
+  // reviewing/shortlisting, and never selected/completed/published. The one
+  // exception is spam triage (new -> invalid, migration 18).
   for (const to of OFFER_STATUSES) {
-    assert.ok(!canTransition("new", to, "prelaunch"), `new -> ${to} during prelaunch`);
+    if (to !== "invalid") {
+      assert.ok(!canTransition("new", to, "prelaunch"), `new -> ${to} during prelaunch`);
+    }
   }
   assert.ok(!canSetStatus("new", "reviewing", "prelaunch"));
   assert.ok(!canSetStatus("new", "shortlisted", "prelaunch"));
   assert.ok(!canSetStatus("new", "selected", "prelaunch"));
   assert.ok(!canSetDetailStatus("new", "selected", "prelaunch"));
   assert.ok(!canSetDetailStatus("new", "meetup_scheduled", "prelaunch"));
-  assert.ok(!canSetDetailStatus("new", "invalid", "prelaunch"));
+  assert.ok(!canSetDetailStatus("new", "declined", "prelaunch"));
   assert.deepEqual(availableActions("new", "prelaunch"), []);
-  assert.deepEqual(availableDetailActions("new", "prelaunch"), []);
   assert.deepEqual(availableDetailActions("shortlisted", "prelaunch"), []);
   // An unknown/absent challenge status fails closed the same way.
   assert.ok(!canTransition("new", "reviewing", null));
   assert.ok(!canTransition("new", "reviewing"));
   assert.deepEqual(availableActions("new"), []);
+});
+
+test("prelaunch spam triage: only new -> invalid stays available", () => {
+  assert.ok(canTransition("new", "invalid", "prelaunch"));
+  assert.ok(canSetDetailStatus("new", "invalid", "prelaunch"));
+  assert.deepEqual(
+    availableDetailActions("new", "prelaunch").map((a) => a.status),
+    ["invalid"],
+  );
+  // Not a quick list action — spam triage happens on the offer detail page,
+  // exactly as during the active phase.
+  assert.ok(!canSetStatus("new", "invalid", "prelaunch"));
+  // Spam triage is only allowed from "new" (the only state a prelaunch
+  // offer can be in).
+  assert.ok(!canTransition("reviewing", "invalid", "prelaunch"));
+  assert.ok(!canTransition("shortlisted", "invalid", "prelaunch"));
+  // `invalid` stays terminal, so a prelaunch spam exit can never re-enter
+  // the trade workflow.
+  for (const to of OFFER_STATUSES) {
+    assert.ok(!canTransition("invalid", to, "prelaunch"), `invalid -> ${to}`);
+    assert.ok(!canTransition("invalid", to, "active"), `invalid -> ${to}`);
+  }
 });
 
 test("after START CHALLENGE NOW, collected offers enter the normal workflow", () => {

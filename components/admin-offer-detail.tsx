@@ -428,7 +428,8 @@ export function AdminOfferDetail() {
           className="mt-3 border-[3px] border-accent bg-panel px-3 py-2 text-xs leading-relaxed text-accent"
         >
           The challenge has not started yet. This offer is collected only and
-          is frozen at its current status — workflow actions unlock once you
+          is frozen at its current status — the only action available is
+          marking blatant spam invalid. Everything else unlocks once you
           START CHALLENGE NOW.
         </p>
       ) : null}

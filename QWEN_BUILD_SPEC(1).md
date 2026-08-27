@@ -998,11 +998,11 @@ Prelaunch should focus heavily on email capture.
 Visitors may submit potential Trade #1 offers before the 21-day challenge starts:
 
 - Offer submissions and photo uploads are allowed while challenge status is `prelaunch` or `active`.
-- Prelaunch submissions are COLLECTED ONLY: no trade completion, no publishing, no change to the current item/value/trade number, no setting of start_at/end_at, no starting of the 21-day clock, and no offer transition beyond "new" until the admin uses START CHALLENGE NOW.
+- Prelaunch submissions are COLLECTED ONLY: no trade completion, no publishing, no change to the current item/value/trade number, no setting of start_at/end_at, no starting of the 21-day clock, and no offer transition beyond "new" — except marking blatant spam `invalid` — until the admin uses START CHALLENGE NOW.
 - Prelaunch offers use the same server-side validation, rate limiting, CAPTCHA, honeypot, private storage, and UTM attribution as active offers.
 - Prelaunch offers snapshot the authoritative current item (the initial $1) exactly like active offers; browser-supplied item/value information is not trusted.
 - The prelaunch success message must make clear the offer was saved but not accepted, and that nothing is selected or agreed to until the challenge officially begins.
-- Admin can see prelaunch offers (clearly identified as PRELAUNCH) but cannot select/agree/complete/publish them before the challenge starts.
+- Admin can see prelaunch offers (clearly identified as PRELAUNCH) but cannot select/agree/complete/publish them before the challenge starts; the only prelaunch workflow action is marking blatant spam `invalid` (terminal — it can never re-enter the trade workflow).
 - Once START CHALLENGE NOW succeeds, previously collected offers become normal actionable offers; no resubmission is required.
 - Collecting prelaunch offers never starts the challenge or affects challenge timing in any way.
 
