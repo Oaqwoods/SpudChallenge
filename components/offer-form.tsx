@@ -86,6 +86,9 @@ export function OfferForm() {
     "idle",
   );
   const [message, setMessage] = useState("");
+  // Server-reported phase at submission time: prelaunch submissions get the
+  // "collected, not accepted" confirmation instead of the active one.
+  const [acceptedPrelaunch, setAcceptedPrelaunch] = useState(false);
 
   const getDraftId = () => {
     if (!draftIdRef.current) draftIdRef.current = crypto.randomUUID();
@@ -101,14 +104,8 @@ export function OfferForm() {
   }
 
   const phase = now !== null ? getPhase(settings, now) : "prelaunch";
-  if (phase === "prelaunch") {
-    return (
-      <GatePanel
-        title="TRADE #1 OPENS AT LAUNCH"
-        body="The offer form unlocks when the 21-day clock starts. Follow the challenge and you'll be the first to know."
-      />
-    );
-  }
+  // Prompt 39: prelaunch submissions are collected for Trade #1, so the form
+  // is open during prelaunch AND active. Complete and paused stay gated.
   if (phase === "complete") {
     return (
       <GatePanel title="OFFERS CLOSED" body="The 21-day challenge is complete. Thanks for following the journey." />
@@ -124,6 +121,25 @@ export function OfferForm() {
   }
 
   if (status === "success") {
+    if (acceptedPrelaunch) {
+      return (
+        <Panel className="p-8 text-center" role="status">
+          <p className="font-display text-sm text-mint">OFFER RECEIVED</p>
+          <p className="mt-4 text-sm leading-relaxed text-foreground">
+            Your potential Trade #{s.current_trade_number + 1} offer has been
+            saved. The challenge has not started yet, and submitting an offer
+            does not mean it has been accepted.
+          </p>
+          <p className="mt-3 text-xs leading-relaxed text-faded">
+            No trade will be selected or agreed to until the challenge
+            officially begins. Do not transfer or ship anything before then.
+          </p>
+          <Link href="/" className="mt-6 inline-block text-sm text-accent underline">
+            ← Back to the challenge
+          </Link>
+        </Panel>
+      );
+    }
     return (
       <Panel className="p-8 text-center" role="status">
         <p className="font-display text-sm text-mint">OFFER RECEIVED</p>
@@ -251,32 +267,36 @@ export function OfferForm() {
 
     setStatus("submitting");
     try {
-      await callEdgeFunction("submit-offer", {
-        name: name.trim(),
-        email: normalizedEmail,
-        phone: phone.trim() || null,
-        offered_against_trade_number: s.current_trade_number,
-        item_name: itemName.trim(),
-        item_description: itemDescription.trim(),
-        claimed_value: value,
-        condition,
-        city: city.trim(),
-        state: state.trim(),
-        zip: zip.trim() || null,
-        in_person: inPerson === "yes",
-        travel_distance: travelDistance.trim() || null,
-        serial_or_model: serialOrModel.trim() || null,
-        comp_url: compUrl.trim() || null,
-        why_good_trade: whyGoodTrade.trim(),
-        ownership_confirmed: true,
-        not_acceptance_ack: true,
-        terms_accepted: true,
-        photos: photos
-          .filter((p) => p.status === "uploaded" && p.path && p.submitToken)
-          .map((p) => ({ path: p.path, submit_token: p.submitToken })),
-        website,
-        ...readUtm(),
-      });
+      const result = await callEdgeFunction<{ ok?: boolean; prelaunch?: boolean }>(
+        "submit-offer",
+        {
+          name: name.trim(),
+          email: normalizedEmail,
+          phone: phone.trim() || null,
+          offered_against_trade_number: s.current_trade_number,
+          item_name: itemName.trim(),
+          item_description: itemDescription.trim(),
+          claimed_value: value,
+          condition,
+          city: city.trim(),
+          state: state.trim(),
+          zip: zip.trim() || null,
+          in_person: inPerson === "yes",
+          travel_distance: travelDistance.trim() || null,
+          serial_or_model: serialOrModel.trim() || null,
+          comp_url: compUrl.trim() || null,
+          why_good_trade: whyGoodTrade.trim(),
+          ownership_confirmed: true,
+          not_acceptance_ack: true,
+          terms_accepted: true,
+          photos: photos
+            .filter((p) => p.status === "uploaded" && p.path && p.submitToken)
+            .map((p) => ({ path: p.path, submit_token: p.submitToken })),
+          website,
+          ...readUtm(),
+        },
+      );
+      setAcceptedPrelaunch(result.prelaunch === true);
       setStatus("success");
       track("offer_submitted");
     } catch (err) {
@@ -316,12 +336,32 @@ export function OfferForm() {
         </label>
       </div>
 
+      {phase === "prelaunch" ? (
+        <Panel className="border-accent p-4">
+          <p className="font-display text-[10px] uppercase tracking-wider text-accent sm:text-xs">
+            Submit a Trade #{s.current_trade_number + 1} Offer
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-foreground">
+            Think you have something worth trading for my{" "}
+            {formatUsd(s.starting_value)}? Submit it now.
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-faded">
+            Pre-launch offers are being collected, but no trade will be
+            selected or agreed to until the challenge officially begins.
+          </p>
+        </Panel>
+      ) : null}
+
       <Panel className="p-4">
         <p className="font-display text-[9px] uppercase text-faded">You&apos;re offering a trade for</p>
         <p className="mt-2 font-display text-xs text-accent sm:text-sm">
           {s.current_item_name} — {formatUsd(s.current_item_value)}
         </p>
-        <p className="mt-1 text-xs text-faded">Trade #{s.current_trade_number}</p>
+        <p className="mt-1 text-xs text-faded">
+          {phase === "prelaunch"
+            ? `Trade #${s.current_trade_number} / Trade #${s.current_trade_number + 1} opportunity`
+            : `Trade #${s.current_trade_number}`}
+        </p>
       </Panel>
 
       {status === "stale" ? (

@@ -13,12 +13,18 @@ import {
   countByStatus,
   filterOffers,
   isOfferStatus,
+  isPrelaunchOffer,
   offerIdFromQuery,
+  offersLockedBeforeLaunch,
   sortOffers,
   toAdminOffer,
   uuidFromQuery,
   type AdminOfferRow,
 } from "../lib/admin-offers.ts";
+
+// The state machine tests below run against a started challenge; the
+// prelaunch freeze (prompt 39) has its own tests further down.
+const ACTIVE = "active";
 
 function makeOffer(overrides: Partial<AdminOfferRow> = {}): AdminOfferRow {
   return {
@@ -125,35 +131,35 @@ test("countByStatus tallies the dashboard counters", () => {
 });
 
 test("canSetStatus blocks completed offers and no-ops", () => {
-  assert.ok(!canSetStatus("completed", "reviewing"));
-  assert.ok(!canSetStatus("completed", "declined"));
-  assert.ok(!canSetStatus("new", "new"));
+  assert.ok(!canSetStatus("completed", "reviewing", ACTIVE));
+  assert.ok(!canSetStatus("completed", "declined", ACTIVE));
+  assert.ok(!canSetStatus("new", "new", ACTIVE));
 });
 
 test("canSetStatus allows the dashboard actions from live states", () => {
-  assert.ok(canSetStatus("new", "reviewing"));
-  assert.ok(canSetStatus("reviewing", "shortlisted"));
-  assert.ok(canSetStatus("shortlisted", "selected"));
+  assert.ok(canSetStatus("new", "reviewing", ACTIVE));
+  assert.ok(canSetStatus("reviewing", "shortlisted", ACTIVE));
+  assert.ok(canSetStatus("shortlisted", "selected", ACTIVE));
   // Re-opening a declined offer is a deliberate admin decision.
-  assert.ok(canSetStatus("declined", "reviewing"));
+  assert.ok(canSetStatus("declined", "reviewing", ACTIVE));
 });
 
 test("canSetStatus only targets the quick list actions", () => {
   // meetup_scheduled / did_not_complete / invalid / completed belong to the
   // detail-page workflow (prompt 10+) and the trade workflow (prompt 11).
-  assert.ok(!canSetStatus("new", "meetup_scheduled"));
-  assert.ok(!canSetStatus("new", "did_not_complete"));
-  assert.ok(!canSetStatus("new", "invalid"));
-  assert.ok(!canSetStatus("new", "completed"));
+  assert.ok(!canSetStatus("new", "meetup_scheduled", ACTIVE));
+  assert.ok(!canSetStatus("new", "did_not_complete", ACTIVE));
+  assert.ok(!canSetStatus("new", "invalid", ACTIVE));
+  assert.ok(!canSetStatus("new", "completed", ACTIVE));
 });
 
 test("availableActions reflects the current state", () => {
   assert.deepEqual(
-    availableActions("new").map((a) => a.status),
+    availableActions("new", ACTIVE).map((a) => a.status),
     ["reviewing", "shortlisted", "selected", "declined"],
   );
-  assert.deepEqual(availableActions("completed"), []);
-  assert.ok(!availableActions("reviewing").some((a) => a.status === "reviewing"));
+  assert.deepEqual(availableActions("completed", ACTIVE), []);
+  assert.ok(!availableActions("reviewing", ACTIVE).some((a) => a.status === "reviewing"));
 });
 
 test("every enum value has a label and LIST_ACTIONS are valid statuses", () => {
@@ -233,65 +239,65 @@ test("uuidFromQuery reads the requested key only", () => {
 
 test("canTransition enforces the prompt-25 state machine", () => {
   // Forward ladder (jumps allowed) plus exits from live states.
-  assert.ok(canTransition("new", "reviewing"));
-  assert.ok(canTransition("new", "shortlisted"));
-  assert.ok(canTransition("reviewing", "selected"));
-  assert.ok(canTransition("shortlisted", "meetup_scheduled"));
-  assert.ok(canTransition("meetup_scheduled", "declined"));
+  assert.ok(canTransition("new", "reviewing", ACTIVE));
+  assert.ok(canTransition("new", "shortlisted", ACTIVE));
+  assert.ok(canTransition("reviewing", "selected", ACTIVE));
+  assert.ok(canTransition("shortlisted", "meetup_scheduled", ACTIVE));
+  assert.ok(canTransition("meetup_scheduled", "declined", ACTIVE));
   // Walk-away exits exist only after pursuit has started (spec §25).
-  assert.ok(canTransition("selected", "did_not_complete"));
-  assert.ok(canTransition("meetup_scheduled", "did_not_complete"));
-  assert.ok(!canTransition("new", "did_not_complete"));
-  assert.ok(!canTransition("reviewing", "did_not_complete"));
-  assert.ok(!canTransition("shortlisted", "did_not_complete"));
+  assert.ok(canTransition("selected", "did_not_complete", ACTIVE));
+  assert.ok(canTransition("meetup_scheduled", "did_not_complete", ACTIVE));
+  assert.ok(!canTransition("new", "did_not_complete", ACTIVE));
+  assert.ok(!canTransition("reviewing", "did_not_complete", ACTIVE));
+  assert.ok(!canTransition("shortlisted", "did_not_complete", ACTIVE));
   // No backward jumps on the ladder.
-  assert.ok(!canTransition("meetup_scheduled", "reviewing"));
-  assert.ok(!canTransition("selected", "shortlisted"));
-  assert.ok(!canTransition("reviewing", "new"));
+  assert.ok(!canTransition("meetup_scheduled", "reviewing", ACTIVE));
+  assert.ok(!canTransition("selected", "shortlisted", ACTIVE));
+  assert.ok(!canTransition("reviewing", "new", ACTIVE));
   // Deliberate re-opens after an ending.
-  assert.ok(canTransition("declined", "reviewing"));
-  assert.ok(canTransition("did_not_complete", "reviewing"));
+  assert.ok(canTransition("declined", "reviewing", ACTIVE));
+  assert.ok(canTransition("did_not_complete", "reviewing", ACTIVE));
   // completed is RPC-only; invalid and completed are terminal.
   for (const from of OFFER_STATUSES) {
-    assert.ok(!canTransition(from, "completed"), `${from} -> completed`);
+    assert.ok(!canTransition(from, "completed", ACTIVE), `${from} -> completed`);
   }
   for (const to of OFFER_STATUSES) {
-    assert.ok(!canTransition("invalid", to), `invalid -> ${to}`);
-    assert.ok(!canTransition("completed", to), `completed -> ${to}`);
+    assert.ok(!canTransition("invalid", to, ACTIVE), `invalid -> ${to}`);
+    assert.ok(!canTransition("completed", to, ACTIVE), `completed -> ${to}`);
   }
 });
 
 test("canSetDetailStatus agrees with the matrix and never offers completed", () => {
-  assert.ok(canSetDetailStatus("selected", "did_not_complete"));
-  assert.ok(canSetDetailStatus("meetup_scheduled", "did_not_complete"));
-  assert.ok(!canSetDetailStatus("new", "meetup_scheduled"));
-  assert.ok(!canSetDetailStatus("new", "did_not_complete"));
-  assert.ok(!canSetDetailStatus("new", "new"));
-  assert.ok(!canSetDetailStatus("completed", "reviewing"));
-  assert.ok(!canSetDetailStatus("completed", "declined"));
+  assert.ok(canSetDetailStatus("selected", "did_not_complete", ACTIVE));
+  assert.ok(canSetDetailStatus("meetup_scheduled", "did_not_complete", ACTIVE));
+  assert.ok(!canSetDetailStatus("new", "meetup_scheduled", ACTIVE));
+  assert.ok(!canSetDetailStatus("new", "did_not_complete", ACTIVE));
+  assert.ok(!canSetDetailStatus("new", "new", ACTIVE));
+  assert.ok(!canSetDetailStatus("completed", "reviewing", ACTIVE));
+  assert.ok(!canSetDetailStatus("completed", "declined", ACTIVE));
   // completed is reachable only through the trade workflow, never here.
   assert.ok(!DETAIL_ACTIONS.some((a) => a.status === "completed"));
 });
 
 test("failed-meetup path: walk away without touching the public challenge", () => {
   // From a scheduled meetup the operator can walk away…
-  const fromMeetup = availableDetailActions("meetup_scheduled").map((a) => a.status);
+  const fromMeetup = availableDetailActions("meetup_scheduled", ACTIVE).map((a) => a.status);
   assert.ok(fromMeetup.includes("did_not_complete"));
   // …but never publish straight from the offer screen.
   assert.ok(!fromMeetup.includes("completed"));
   // After the walk-away the only way back is a deliberate re-open; the offer
   // cannot jump straight back into the meetup/completion pipeline.
   assert.deepEqual(
-    availableDetailActions("did_not_complete").map((a) => a.status),
+    availableDetailActions("did_not_complete", ACTIVE).map((a) => a.status),
     ["reviewing"],
   );
-  assert.ok(!canSetDetailStatus("did_not_complete", "meetup_scheduled"));
-  assert.ok(!canSetDetailStatus("did_not_complete", "selected"));
+  assert.ok(!canSetDetailStatus("did_not_complete", "meetup_scheduled", ACTIVE));
+  assert.ok(!canSetDetailStatus("did_not_complete", "selected", ACTIVE));
 });
 
 test("availableDetailActions excludes the current state and locks completed", () => {
-  assert.deepEqual(availableDetailActions("completed"), []);
-  const fromShortlisted = availableDetailActions("shortlisted").map((a) => a.status);
+  assert.deepEqual(availableDetailActions("completed", ACTIVE), []);
+  const fromShortlisted = availableDetailActions("shortlisted", ACTIVE).map((a) => a.status);
   assert.ok(!fromShortlisted.includes("shortlisted"));
   assert.ok(fromShortlisted.includes("meetup_scheduled"));
   // A shortlisted offer has not been pursued yet, so walk-away is not offered.
@@ -302,4 +308,64 @@ test("detail actions never use Accept-style final wording", () => {
   for (const action of [...DETAIL_ACTIONS, ...LIST_ACTIONS]) {
     assert.ok(!/accept/i.test(action.label), `forbidden label: ${action.label}`);
   }
+});
+
+// Prompt 39: prelaunch Trade #1 offers are COLLECTED ONLY.
+
+test("offersLockedBeforeLaunch locks prelaunch and fails closed", () => {
+  assert.equal(offersLockedBeforeLaunch("prelaunch"), true);
+  assert.equal(offersLockedBeforeLaunch(null), true);
+  assert.equal(offersLockedBeforeLaunch(undefined), true);
+  assert.equal(offersLockedBeforeLaunch("something-else"), true);
+  assert.equal(offersLockedBeforeLaunch("active"), false);
+  assert.equal(offersLockedBeforeLaunch("complete"), false);
+});
+
+test("prelaunch freeze: admin cannot select/complete/publish before the challenge starts", () => {
+  // No transition at all out of a collected prelaunch offer — not even
+  // reviewing/shortlisting, and never selected/completed/published.
+  for (const to of OFFER_STATUSES) {
+    assert.ok(!canTransition("new", to, "prelaunch"), `new -> ${to} during prelaunch`);
+  }
+  assert.ok(!canSetStatus("new", "reviewing", "prelaunch"));
+  assert.ok(!canSetStatus("new", "shortlisted", "prelaunch"));
+  assert.ok(!canSetStatus("new", "selected", "prelaunch"));
+  assert.ok(!canSetDetailStatus("new", "selected", "prelaunch"));
+  assert.ok(!canSetDetailStatus("new", "meetup_scheduled", "prelaunch"));
+  assert.ok(!canSetDetailStatus("new", "invalid", "prelaunch"));
+  assert.deepEqual(availableActions("new", "prelaunch"), []);
+  assert.deepEqual(availableDetailActions("new", "prelaunch"), []);
+  assert.deepEqual(availableDetailActions("shortlisted", "prelaunch"), []);
+  // An unknown/absent challenge status fails closed the same way.
+  assert.ok(!canTransition("new", "reviewing", null));
+  assert.ok(!canTransition("new", "reviewing"));
+  assert.deepEqual(availableActions("new"), []);
+});
+
+test("after START CHALLENGE NOW, collected offers enter the normal workflow", () => {
+  // Same offers, same snapshot — the freeze simply lifts; no resubmission.
+  assert.ok(canTransition("new", "reviewing", "active"));
+  assert.ok(canTransition("new", "shortlisted", "active"));
+  assert.ok(canTransition("new", "selected", "active"));
+  assert.ok(canSetStatus("new", "reviewing", "active"));
+  assert.deepEqual(
+    availableDetailActions("new", "active").map((a) => a.status),
+    ["reviewing", "shortlisted", "selected", "declined", "invalid"],
+  );
+  // Post-challenge cleanup remains possible after completion too.
+  assert.ok(canTransition("new", "declined", "complete"));
+});
+
+test("isPrelaunchOffer distinguishes collected offers via created_at vs start_at", () => {
+  const startAt = "2026-09-01T00:00:00.000Z";
+  assert.equal(isPrelaunchOffer("2026-08-31T23:59:59.999Z", startAt), true);
+  assert.equal(isPrelaunchOffer("2026-09-01T00:00:00.000Z", startAt), false);
+  assert.equal(isPrelaunchOffer("2026-09-02T12:00:00.000Z", startAt), false);
+  // Never started: everything collected so far is prelaunch.
+  assert.equal(isPrelaunchOffer("2026-08-31T23:59:59.999Z", null), true);
+  assert.equal(isPrelaunchOffer("2026-08-31T23:59:59.999Z", ""), true);
+  // Unreadable timestamps: no badge rather than a wrong badge.
+  assert.equal(isPrelaunchOffer("not-a-date", startAt), false);
+  assert.equal(isPrelaunchOffer("2026-08-31T23:59:59.999Z", "not-a-date"), false);
+  assert.equal(isPrelaunchOffer(null, startAt), false);
 });

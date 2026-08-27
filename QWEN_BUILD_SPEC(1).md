@@ -980,16 +980,31 @@ Mark legal copy as requiring attorney review before launch.
 Before Day 1:
 
 Hero:
-> $1 → $5,000,000  
+> $1 → $5,000,000
 > Starts in [countdown]
 
 CTA:
 > FOLLOW THE CHALLENGE
 
-Optional:
-> Trade #1 opens when the clock starts.
+Secondary CTA:
+> SUBMIT A TRADE #1 OFFER
+
+During prelaunch the public offer form is open: visitors may submit potential Trade #1 offers for the initial $1 item (see §17A). Prelaunch offers are collected only — no trade is selected or agreed to until the challenge officially begins.
 
 Prelaunch should focus heavily on email capture.
+
+## 17A. Prelaunch Trade #1 Offer Collection
+
+Visitors may submit potential Trade #1 offers before the 21-day challenge starts:
+
+- Offer submissions and photo uploads are allowed while challenge status is `prelaunch` or `active`.
+- Prelaunch submissions are COLLECTED ONLY: no trade completion, no publishing, no change to the current item/value/trade number, no setting of start_at/end_at, no starting of the 21-day clock, and no offer transition beyond "new" until the admin uses START CHALLENGE NOW.
+- Prelaunch offers use the same server-side validation, rate limiting, CAPTCHA, honeypot, private storage, and UTM attribution as active offers.
+- Prelaunch offers snapshot the authoritative current item (the initial $1) exactly like active offers; browser-supplied item/value information is not trusted.
+- The prelaunch success message must make clear the offer was saved but not accepted, and that nothing is selected or agreed to until the challenge officially begins.
+- Admin can see prelaunch offers (clearly identified as PRELAUNCH) but cannot select/agree/complete/publish them before the challenge starts.
+- Once START CHALLENGE NOW succeeds, previously collected offers become normal actionable offers; no resubmission is required.
+- Collecting prelaunch offers never starts the challenge or affects challenge timing in any way.
 
 ## 18. Active Challenge Mode
 

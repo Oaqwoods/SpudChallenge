@@ -22,6 +22,7 @@ exception).
 | `20260825000014_trade_documents_storage.sql` | Valuation recordkeeping (playbook PROMPT 29 / spec §8.6): private `trade-documents` storage bucket for admin-added verification documents (signed receipts, agreements, professional verification) referenced by the existing `trade_documents` table — admin-only storage policies, 10 MB bucket cap, no anon access, never exposed through any public view |
 | `20260825000015_publish_freeze_on_complete.sql` | Pause/archive safety (playbook PROMPT 30): re-issues `publish_trade` with a completion guard — once the stored challenge status is `complete` the trade order is frozen and new publishes raise (idempotent replays and `update_published_trade` corrections still work). Pairs with the `challengeEnded` checks in submit-offer/offer-upload that close offers the moment `end_at` passes |
 | `20260825000016_start_challenge_now.sql` | START CHALLENGE NOW (playbook PROMPT 32): `start_challenge_now()` RPC — the authoritative, confirmation-gated launch. Stamps `start_at` with the **database** clock (never the admin browser), sets `end_at` to exactly `start_at + 21 days` from one transaction timestamp, flips `prelaunch → active`, and rejects repeated/duplicate starts atomically (settings row `FOR UPDATE` + status/`start_at` guard). Manual future scheduling stays the admin settings form |
+| `20260827000017_prelaunch_offer_freeze.sql` | Prelaunch Trade #1 collection (playbook PROMPT 39 / spec §17A): extends the migration-10 transition trigger so that while the challenge status is `prelaunch`, every offer status change is rejected — prelaunch offers are collected only and stay frozen until START CHALLENGE NOW unlocks the normal workflow. No new columns: `created_at < start_at` identifies prelaunch offers |
 
 ## Applying the migrations
 
@@ -32,7 +33,7 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-**Option B — Dashboard SQL Editor:** paste and run the sixteen files in
+**Option B — Dashboard SQL Editor:** paste and run the seventeen files in
 timestamp order, one at a time.
 
 ## Access model (RLS)
@@ -127,8 +128,8 @@ view). See build spec §38.
 | --- | --- |
 | `follow-signup` | Public email-preference capture: validation, honeypot, rate limiting, upsert with resubscribe semantics, guarded Resend confirmation |
 | `email-preferences` | Signed-token unsubscribe (`action: "unsubscribe"`); unsubscribing auto-removes the follower from the public wall via the view filter |
-| `offer-upload` | Issues signed upload URLs for private `offer-uploads` photos (image allowlist, size cap, rate limit) plus an HMAC submit token binding the path to the later submission |
-| `submit-offer` | Public trade-offer submission: full validation, authoritative current-item snapshot with stale-submission rejection (spec §26), HMAC + existence verification of photos, insert into `offers`/`offer_files` |
+| `offer-upload` | Issues signed upload URLs for private `offer-uploads` photos during prelaunch AND active (image allowlist, size cap, rate limit) plus an HMAC submit token binding the path to the later submission |
+| `submit-offer` | Public trade-offer submission during prelaunch AND active (spec §17A — prelaunch offers are collected only): full validation, authoritative current-item snapshot with stale-submission rejection (spec §26), HMAC + existence verification of photos, insert into `offers`/`offer_files` |
 | `send-broadcast` | Admin-only (session JWT + `app_admins`): sends a reviewed draft broadcast with an explicit confirm flag, Resend batches of ≤100, per-recipient logging to `email_broadcast_recipients`, unsubscribe exclusion, and no re-send of already-delivered addresses (spec §7) |
 | `track-event` | Public fire-and-forget analytics: event allowlist + length caps, rate limited, inserts into `analytics_events`; never accepts sensitive form data (spec §13) |
 

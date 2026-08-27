@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   ALLOWED_MIME,
   challengeEnded,
+  offerGateReason,
+  offersOpen,
   MAX_PHOTOS,
   normalizeEmail,
   isValidEmail,
@@ -121,4 +123,64 @@ test("challengeEnded closes offers at completion, including clock expiry", () =>
     false,
     "unreadable deadline is ignored rather than closing by accident",
   );
+});
+
+// Prompt 39: prelaunch Trade #1 submissions.
+
+test("offersOpen accepts prelaunch and active, rejects everything else", () => {
+  // Prelaunch visitors can submit offers and upload photos (collected only).
+  assert.equal(offersOpen({ status: "prelaunch" }), true);
+  assert.equal(offersOpen({ status: "active" }), true);
+  assert.equal(offersOpen({ status: "complete" }), false);
+  assert.equal(offersOpen({ status: undefined }), false);
+  assert.equal(offersOpen({ status: "something-else" }), false);
+  assert.equal(offersOpen(null), false, "missing settings fail closed");
+});
+
+test("offerGateReason opens prelaunch and active for submissions/uploads", () => {
+  const now = Date.parse("2026-08-27T12:00:00.000Z");
+  assert.equal(offerGateReason({ status: "prelaunch", offers_paused: false, end_at: null }, now), null);
+  assert.equal(
+    offerGateReason(
+      { status: "active", offers_paused: false, end_at: "2026-09-17T12:00:00.000Z" },
+      now,
+    ),
+    null,
+  );
+});
+
+test("offerGateReason still rejects paused offers during prelaunch", () => {
+  const now = Date.parse("2026-08-27T12:00:00.000Z");
+  assert.equal(
+    offerGateReason({ status: "prelaunch", offers_paused: true, end_at: null }, now),
+    "paused",
+  );
+  assert.equal(
+    offerGateReason({ status: "active", offers_paused: true, end_at: null }, now),
+    "paused",
+  );
+});
+
+test("offerGateReason still rejects offers after completion", () => {
+  const now = Date.parse("2026-09-22T15:30:00.000Z");
+  assert.equal(
+    offerGateReason({ status: "complete", offers_paused: false, end_at: null }, now - 1),
+    "ended",
+    "explicit completion closes even before end_at",
+  );
+  assert.equal(
+    offerGateReason(
+      { status: "active", offers_paused: false, end_at: "2026-09-22T15:30:00.000Z" },
+      now,
+    ),
+    "ended",
+    "closed the moment the 21-day clock runs out",
+  );
+});
+
+test("offerGateReason fails closed for missing or unknown settings", () => {
+  const now = Date.parse("2026-08-27T12:00:00.000Z");
+  assert.equal(offerGateReason(null, now), "closed");
+  assert.equal(offerGateReason({ status: "archived", offers_paused: false, end_at: null }, now), "closed");
+  assert.equal(offerGateReason({ offers_paused: false, end_at: null }, now), "closed");
 });

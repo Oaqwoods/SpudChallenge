@@ -227,28 +227,76 @@ export const OFFER_TRANSITIONS: Record<OfferStatus, readonly OfferStatus[]> = {
   invalid: [],
 };
 
-export function canTransition(from: OfferStatus, to: OfferStatus): boolean {
+// Prompt 39 / spec §17A: prelaunch offers are COLLECTED ONLY. While the
+// challenge has not been started, offers are frozen at their current status
+// — no selecting, shortlisting, or even declining. The whole ladder unlocks
+// when START CHALLENGE NOW flips the status to active. An unknown or absent
+// challenge status fails closed (locked); the database trigger (migration
+// 17) enforces the same freeze server-side.
+export function offersLockedBeforeLaunch(challengeStatus: string | null | undefined): boolean {
+  return challengeStatus !== "active" && challengeStatus !== "complete";
+}
+
+// `challengeStatus` defaults to locked: a caller that does not know the
+// challenge phase offers no transitions at all.
+export function canTransition(
+  from: OfferStatus,
+  to: OfferStatus,
+  challengeStatus: string | null = null,
+): boolean {
   if (from === to) return false;
+  if (offersLockedBeforeLaunch(challengeStatus)) return false;
   return OFFER_TRANSITIONS[from].includes(to);
 }
 
 // Quick list actions: allowed only when the transition matrix agrees.
-export function canSetStatus(from: OfferStatus, to: OfferStatus): boolean {
-  if (!canTransition(from, to)) return false;
+export function canSetStatus(
+  from: OfferStatus,
+  to: OfferStatus,
+  challengeStatus: string | null = null,
+): boolean {
+  if (!canTransition(from, to, challengeStatus)) return false;
   return LIST_ACTIONS.some((action) => action.status === to);
 }
 
-export function availableActions(from: OfferStatus): ReadonlyArray<{ status: OfferStatus; label: string }> {
-  return LIST_ACTIONS.filter((action) => canSetStatus(from, action.status));
+export function availableActions(
+  from: OfferStatus,
+  challengeStatus: string | null = null,
+): ReadonlyArray<{ status: OfferStatus; label: string }> {
+  return LIST_ACTIONS.filter((action) => canSetStatus(from, action.status, challengeStatus));
 }
 
 // Detail-page transitions: the action set minus whatever the matrix forbids
 // from the current state. Nothing here touches the public challenge.
-export function canSetDetailStatus(from: OfferStatus, to: OfferStatus): boolean {
-  if (!canTransition(from, to)) return false;
+export function canSetDetailStatus(
+  from: OfferStatus,
+  to: OfferStatus,
+  challengeStatus: string | null = null,
+): boolean {
+  if (!canTransition(from, to, challengeStatus)) return false;
   return DETAIL_ACTIONS.some((action) => action.status === to);
 }
 
-export function availableDetailActions(from: OfferStatus): ReadonlyArray<{ status: OfferStatus; label: string }> {
-  return DETAIL_ACTIONS.filter((action) => canSetDetailStatus(from, action.status));
+export function availableDetailActions(
+  from: OfferStatus,
+  challengeStatus: string | null = null,
+): ReadonlyArray<{ status: OfferStatus; label: string }> {
+  return DETAIL_ACTIONS.filter((action) => canSetDetailStatus(from, action.status, challengeStatus));
+}
+
+// Prompt 39: an offer is PRELAUNCH when it was collected before START
+// CHALLENGE NOW stamped start_at (migration 16 uses the database clock and
+// start_at is never moved earlier afterward, so created_at < start_at is a
+// reliable marker — no extra column needed). While the challenge has never
+// started, every stored offer is prelaunch by construction.
+export function isPrelaunchOffer(
+  createdAtIso: string | null | undefined,
+  startAtIso: string | null | undefined,
+): boolean {
+  if (!startAtIso) return true;
+  const created = Date.parse(createdAtIso ?? "");
+  if (Number.isNaN(created)) return false;
+  const start = Date.parse(startAtIso);
+  if (Number.isNaN(start)) return false;
+  return created < start;
 }

@@ -18,32 +18,38 @@ export function OfferCta() {
   const phase = now !== null ? getPhase(settings, now) : "prelaunch";
   const paused = settings?.offers_paused ?? false;
 
-  if (phase === "active" && !paused) {
+  if (phase === "complete") {
     return (
-      <a
-        href="/offer/"
-        onClick={() => track("offer_cta_clicked")}
-        className={`${baseButton} ${primary}`}
+      <span
+        aria-disabled="true"
+        className={`${baseButton} cursor-not-allowed border-edge bg-panel text-faded`}
       >
-        I Have Something Better
-      </a>
+        Offers Closed
+      </span>
+    );
+  }
+  if (paused) {
+    return (
+      <span
+        aria-disabled="true"
+        className={`${baseButton} cursor-not-allowed border-edge bg-panel text-faded`}
+      >
+        Offers Paused
+      </span>
     );
   }
 
-  const label =
-    phase === "complete"
-      ? "Offers Closed"
-      : paused
-        ? "Offers Paused"
-        : "Trade #1 Opens at Launch";
-
+  // Prompt 39: prelaunch submissions are collected for Trade #1, so the CTA
+  // is live in both phases. Follow stays visually primary before launch
+  // (spec §17); the offer CTA leads once the challenge is active.
   return (
-    <span
-      aria-disabled="true"
-      className={`${baseButton} cursor-not-allowed border-edge bg-panel text-faded`}
+    <a
+      href="/offer/"
+      onClick={() => track("offer_cta_clicked")}
+      className={`${baseButton} ${phase === "active" ? primary : secondary}`}
     >
-      {label}
-    </span>
+      I Have Something Better
+    </a>
   );
 }
 

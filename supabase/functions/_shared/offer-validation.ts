@@ -73,6 +73,41 @@ export function challengeEnded(
   return false;
 }
 
+// Prompt 39: submissions and photo uploads are open during prelaunch AND
+// active. Prelaunch offers are collected only — nothing here starts the
+// clock; start_at/end_at are set exclusively by START CHALLENGE NOW (or the
+// admin schedule form). Unknown statuses fail closed. Pure — unit tested.
+export function offersOpen(
+  settings: { status?: string | null } | null,
+): boolean {
+  if (!settings) return false;
+  return settings.status === "prelaunch" || settings.status === "active";
+}
+
+export type OfferGateReason = "paused" | "ended" | "closed";
+
+// Single gate order shared by submit-offer and offer-upload so the two
+// endpoints can never drift apart. Returns null when submissions/uploads
+// may proceed, otherwise the reason to reject:
+//   1. paused first — pausing blocks even before launch (spec §31)
+//   2. ended — stored completion OR the 21-day clock running out
+//   3. closed — any status outside prelaunch/active (fail closed)
+// Pure — unit tested under Node.
+export function offerGateReason(
+  settings: {
+    status?: string | null;
+    offers_paused?: boolean | null;
+    end_at?: string | null;
+  } | null,
+  nowMs: number,
+): OfferGateReason | null {
+  if (!settings) return "closed";
+  if (settings.offers_paused) return "paused";
+  if (challengeEnded(settings, nowMs)) return "ended";
+  if (!offersOpen(settings)) return "closed";
+  return null;
+}
+
 // HMAC binding between an issued upload path and the eventual offer
 // submission: an attacker who guesses/learns a storage path cannot attach it
 // to an offer without the matching submit token. Domain-separated from other

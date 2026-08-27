@@ -1,8 +1,10 @@
-// submit-offer — public trade-offer submission (spec §5, §26, §28).
+// submit-offer — public trade-offer submission (spec §5, §17A, §26, §28).
 // Offers are written through the service role; there are no public INSERT
 // policies on offers/offer_files. The authoritative current item is read
 // from challenge_settings and snapshotted server-side — client-supplied
-// values are never trusted.
+// values are never trusted. Submissions are accepted during prelaunch AND
+// active; prelaunch offers are collected only (never selected/published,
+// never start the clock).
 
 import { captchaConfig, fetchCaptchaVerification, verifyCaptchaToken } from "../_shared/captcha.ts";
 import { corsHeaders, isOriginAllowed } from "../_shared/cors.ts";
@@ -10,7 +12,7 @@ import { errorMessage } from "../_shared/logging.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
 import {
-  challengeEnded,
+  offerGateReason,
   isValidCompUrl,
   isValidEmail,
   isAllowedPath,
@@ -122,16 +124,18 @@ Deno.serve(async (req) => {
     if (!settings) {
       return json({ error: "Challenge is not available." }, 500, cors);
     }
-    if (settings.offers_paused) {
+    // Shared gate order (paused → ended → closed). Prelaunch and active are
+    // both open; prelaunch offers are collected only — nothing here starts
+    // the challenge clock (prompt 39 / spec §17A).
+    const gate = offerGateReason(settings, Date.now());
+    if (gate === "paused") {
       return json({ error: "Offers are paused right now. Please check back soon." }, 503, cors);
     }
-    if (settings.status !== "active") {
-      return json({ error: "Offers open when the challenge starts." }, 409, cors);
-    }
-    // Prompt 30: at completion offers close by default — including the
-    // moment the 21-day clock runs out (stored status flips later).
-    if (challengeEnded(settings, Date.now())) {
+    if (gate === "ended") {
       return json({ error: "The challenge has ended — offers are closed." }, 409, cors);
+    }
+    if (gate === "closed") {
+      return json({ error: "Offers are not open right now. Please check back soon." }, 409, cors);
     }
 
     const currentTradeNumber = Number(settings.current_trade_number ?? 0);
@@ -278,7 +282,9 @@ Deno.serve(async (req) => {
       if (filesInsert.error) throw filesInsert.error;
     }
 
-    return json({ ok: true }, 200, cors);
+    // `prelaunch` tells the form which confirmation copy to show; the offer
+    // itself is identical in both phases (status "new", collection only).
+    return json({ ok: true, prelaunch: settings.status === "prelaunch" }, 200, cors);
   } catch (err) {
     console.error("submit-offer failed:", errorMessage(err));
     return json({ error: "Something went wrong. Please try again." }, 500, cors);

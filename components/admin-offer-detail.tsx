@@ -15,7 +15,9 @@ import {
   OFFER_STATUS_LABELS,
   availableDetailActions,
   canSetDetailStatus,
+  isPrelaunchOffer,
   offerIdFromQuery,
+  offersLockedBeforeLaunch,
   toAdminOffer,
   type AdminOfferRow,
   type OfferStatus,
@@ -61,14 +63,30 @@ type DetailState =
   | { phase: "unconfigured" }
   | { phase: "error"; message: string }
   | { phase: "not_found" }
-  | { phase: "ready"; offer: AdminOfferRow; files: OfferFile[] };
+  | {
+      phase: "ready";
+      offer: AdminOfferRow;
+      files: OfferFile[];
+      challengeStatus: string | null;
+      challengeStartAt: string | null;
+    };
 
 // Fetch-only (no setState): the caller applies the result after the await.
 async function fetchOfferDetail(id: string): Promise<DetailState> {
   const supabase = getSupabase();
   if (!supabase) return { phase: "unconfigured" };
 
-  const offerRes = await supabase.from("offers").select("*").eq("id", id).maybeSingle();
+  // Prompt 39: the challenge phase decides whether workflow actions are
+  // available. A failed settings read fails closed (locked) rather than
+  // hiding the offer.
+  const [offerRes, settingsRes] = await Promise.all([
+    supabase.from("offers").select("*").eq("id", id).maybeSingle(),
+    supabase
+      .from("challenge_settings")
+      .select("status, start_at")
+      .eq("id", 1)
+      .maybeSingle(),
+  ]);
   if (offerRes.error) {
     return {
       phase: "error",
@@ -77,6 +95,10 @@ async function fetchOfferDetail(id: string): Promise<DetailState> {
   }
   const offer = offerRes.data ? toAdminOffer(offerRes.data as Record<string, unknown>) : null;
   if (!offer) return { phase: "not_found" };
+
+  const settingsRow = settingsRes.error ? null : (settingsRes.data as { status?: string | null; start_at?: string | null } | null);
+  const challengeStatus = typeof settingsRow?.status === "string" ? settingsRow.status : null;
+  const challengeStartAt = typeof settingsRow?.start_at === "string" ? settingsRow.start_at : null;
 
   const filesRes = await supabase
     .from("offer_files")
@@ -94,7 +116,9 @@ async function fetchOfferDetail(id: string): Promise<DetailState> {
     id: string;
     storage_path: string;
   }>;
-  if (rows.length === 0) return { phase: "ready", offer, files: [] };
+  if (rows.length === 0) {
+    return { phase: "ready", offer, files: [], challengeStatus, challengeStartAt };
+  }
 
   const signed = await supabase.storage
     .from("offer-uploads")
@@ -108,7 +132,7 @@ async function fetchOfferDetail(id: string): Promise<DetailState> {
     storage_path: r.storage_path,
     signedUrl: byPath.get(r.storage_path) ?? null,
   }));
-  return { phase: "ready", offer, files };
+  return { phase: "ready", offer, files, challengeStatus, challengeStartAt };
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -216,7 +240,12 @@ export function AdminOfferDetail() {
   };
 
   const applyStatus = async (next: OfferStatus) => {
-    if (state.phase !== "ready" || !canSetDetailStatus(state.offer.status, next)) return;
+    if (
+      state.phase !== "ready" ||
+      !canSetDetailStatus(state.offer.status, next, state.challengeStatus)
+    ) {
+      return;
+    }
     const supabase = getSupabase();
     if (!supabase) return;
     setPending(true);
@@ -243,7 +272,7 @@ export function AdminOfferDetail() {
 
   const confirmArmed = async () => {
     if (state.phase !== "ready" || armed === null) return;
-    if (!canSetDetailStatus(state.offer.status, armed)) {
+    if (!canSetDetailStatus(state.offer.status, armed, state.challengeStatus)) {
       setArmed(null);
       return;
     }
@@ -355,7 +384,8 @@ export function AdminOfferDetail() {
     );
   }
 
-  const { offer, files } = state;
+  const { offer, files, challengeStatus, challengeStartAt } = state;
+  const lockedBeforeLaunch = offersLockedBeforeLaunch(challengeStatus);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -365,10 +395,17 @@ export function AdminOfferDetail() {
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-base text-accent sm:text-lg">{offer.item_name}</h1>
-        <span
-          className={`inline-block border-2 px-2 py-0.5 font-display text-[8px] uppercase ${STATUS_BADGE[offer.status]}`}
-        >
-          {OFFER_STATUS_LABELS[offer.status]}
+        <span className="flex flex-wrap items-center gap-2">
+          {isPrelaunchOffer(offer.created_at, challengeStartAt) ? (
+            <span className="inline-block border-2 border-faded px-2 py-0.5 font-display text-[8px] uppercase text-faded">
+              Prelaunch
+            </span>
+          ) : null}
+          <span
+            className={`inline-block border-2 px-2 py-0.5 font-display text-[8px] uppercase ${STATUS_BADGE[offer.status]}`}
+          >
+            {OFFER_STATUS_LABELS[offer.status]}
+          </span>
         </span>
       </div>
       <p className="mt-1 text-xs text-faded">
@@ -385,6 +422,17 @@ export function AdminOfferDetail() {
         scheduling never changes the public challenge.
       </p>
 
+      {lockedBeforeLaunch ? (
+        <p
+          role="note"
+          className="mt-3 border-[3px] border-accent bg-panel px-3 py-2 text-xs leading-relaxed text-accent"
+        >
+          The challenge has not started yet. This offer is collected only and
+          is frozen at its current status — workflow actions unlock once you
+          START CHALLENGE NOW.
+        </p>
+      ) : null}
+
       {notice ? (
         <p
           role={notice.tone === "error" ? "alert" : "status"}
@@ -400,7 +448,7 @@ export function AdminOfferDetail() {
         <Panel className="p-4">
           <p className={labelClass}>Workflow actions</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {availableDetailActions(offer.status).map((action) => (
+            {availableDetailActions(offer.status, challengeStatus).map((action) => (
               <button
                 key={action.status}
                 type="button"

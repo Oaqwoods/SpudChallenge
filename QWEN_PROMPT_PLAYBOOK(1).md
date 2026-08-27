@@ -1362,3 +1362,218 @@ Do not change DNS automatically. Do not guess DNS values if current official Git
 
 Run the final production static export/build and report blockers before asking the owner to change DNS.
 
+# PROMPT 39 — PRELAUNCH TRADE #1 SUBMISSIONS
+
+Change the public trade-offer workflow so visitors may submit potential Trade #1 offers BEFORE the 21-day challenge officially starts.
+
+Purpose:
+We are beginning paid promotion before launch. Visitors should be able to submit something they would trade for the initial $1 instead of being told to return later.
+
+IMPORTANT CHALLENGE-INTEGRITY RULE:
+
+Prelaunch submissions are COLLECTED ONLY.
+
+Before the challenge officially starts:
+- do not complete a trade
+- do not publish a trade
+- do not change the current item
+- do not change the current value
+- do not increment the trade number
+- do not set start_at
+- do not set end_at
+- do not start the 21-day clock
+- do not allow an offer to be transitioned to selected, meetup_scheduled, completed, or published
+- preferably keep all prelaunch offers in status "new"
+- do not send any communication implying that an offer has been accepted
+
+The challenge still officially begins ONLY when the admin uses the existing:
+
+START CHALLENGE NOW
+
+action.
+
+The server must continue setting start_at and end_at exactly as it does now. Prelaunch offer collection must have absolutely no effect on challenge timing.
+
+PUBLIC EXPERIENCE
+
+During prelaunch, replace the existing gate that says:
+
+"TRADE #1 OPENS AT LAUNCH"
+
+with an enabled offer form.
+
+Add a clear prelaunch notice above the form, styled consistently with the site:
+
+"SUBMIT A TRADE #1 OFFER"
+
+and explanatory copy similar to:
+
+"Think you have something worth trading for my $1? Submit it now. Pre-launch offers are being collected, but no trade will be selected or agreed to until the challenge officially begins."
+
+Keep this concise and in the existing retro-game visual style.
+
+The form should clearly show that the visitor is offering against:
+
+One U.S. Dollar — $1
+Trade #0 / Trade #1 opportunity
+
+Use the existing authoritative challenge_settings values rather than hard-coding these values wherever practical.
+
+SUBMISSION BEHAVIOR
+
+Allow normal offer submissions while challenge status is:
+
+prelaunch
+OR
+active
+
+Continue rejecting offers when:
+- offers_paused = true
+- the challenge is complete
+- the 21-day end time has passed
+- the current item changed while a visitor was filling out the form
+
+Preserve the existing authoritative current-item snapshot behavior:
+- offered_against_trade_number
+- offered_against_item_name
+- offered_against_item_value
+
+Do not trust browser-supplied current item/value information.
+
+Prelaunch offers should still:
+- validate ownership acknowledgement
+- validate contact information
+- support item photos
+- support claimed value
+- capture city/state
+- capture whether an in-person trade is possible
+- capture UTMs/landing_variant
+- use existing rate limits
+- use existing CAPTCHA integration point
+- use private storage
+- use existing spam/honeypot protections
+
+PHOTO UPLOADS
+
+Update offer-upload so legitimate photo uploads are allowed in both:
+- prelaunch
+- active
+
+Continue blocking uploads if:
+- offers are paused
+- challenge is complete
+- challenge end time has passed
+
+Do not weaken the existing private-storage, MIME-type, size, HMAC/token, or rate-limit protections.
+
+SUCCESS MESSAGE
+
+If an offer is submitted during prelaunch, show a confirmation similar to:
+
+"OFFER RECEIVED"
+
+"Your potential Trade #1 offer has been saved. The challenge has not started yet, and submitting an offer does not mean it has been accepted. No trade will be selected or agreed to until the challenge officially begins."
+
+Do not tell the user that the offer is under active negotiation.
+
+ADMIN SAFETY
+
+Audit the admin offer workflow.
+
+While challenge status is prelaunch:
+- prelaunch offers may be stored and visible to the admin
+- clearly identify them as PRELAUNCH submissions if practical
+- do not allow workflow actions that would amount to selecting/agreeing to/completing the trade before START CHALLENGE NOW
+- at minimum, disable transitions beyond "new" until status becomes active
+
+Once START CHALLENGE NOW succeeds:
+- the previously collected Trade #1 offers become normal actionable offers
+- they remain attached to the authoritative initial $1 item
+- no resubmission is required merely because the clock started
+- admin may then use the normal review → shortlist → selected → meetup → completed → published workflow
+
+If an existing transition guard already enforces these rules, extend it rather than creating a second state machine.
+
+DATA / AUDITABILITY
+
+Determine whether the existing created_at timestamp plus challenge start_at is sufficient to distinguish prelaunch offers.
+
+Do not add a database column merely for convenience.
+
+If a dedicated submission_phase or equivalent field is genuinely necessary for reliable auditing/UI, explain why before adding it and implement it through a migration.
+
+Do not expose any additional private offer information publicly.
+
+HOMEPAGE / CTA
+
+During prelaunch, the homepage trade CTA should lead to the now-active offer form rather than suggesting that submissions are unavailable.
+
+Do not start the challenge automatically when someone submits an offer.
+
+Do not change the countdown behavior.
+
+The homepage countdown should continue showing the existing prelaunch state until START CHALLENGE NOW is used.
+
+ANALYTICS
+
+Continue tracking:
+- offer_cta_clicked
+- offer_started
+- offer_submitted
+
+Ensure existing UTM attribution works for prelaunch submissions so we can evaluate the first ad campaign.
+
+TESTS
+
+Add or update tests covering at least:
+
+1. prelaunch visitor can open offer form
+2. prelaunch visitor can upload valid item photos
+3. prelaunch visitor can submit a valid offer
+4. submitted offer remains status "new"
+5. prelaunch submission does not start challenge clock
+6. prelaunch submission does not alter current item/value/trade number
+7. paused offers are still rejected during prelaunch
+8. completed challenge still rejects offers
+9. current-item-change protection still works
+10. admin cannot select/complete/publish prelaunch offer before challenge starts
+11. after START CHALLENGE NOW, previously collected offers can enter normal workflow
+12. production static export succeeds
+
+SECURITY
+
+Do not weaken:
+- RLS
+- admin authorization
+- Edge Function CORS
+- rate limits
+- upload protections
+- private storage
+- existing challenge timing protections
+
+IMPLEMENTATION PROCESS
+
+Before making changes:
+1. inspect OfferForm
+2. inspect submit-offer
+3. inspect offer-upload
+4. inspect challenge phase helpers
+5. inspect admin offer transition guards
+6. inspect existing tests
+
+Tell me exactly which files need to change and whether a migration is required.
+
+Then implement the feature.
+
+After implementation:
+- run tests
+- run typecheck
+- run production build/static export
+- report manual deployment steps
+- identify any Edge Functions that must be redeployed
+- identify any migration that must be pushed
+
+Do not add unrelated features.
+Do not redesign the site.
+Do not change the 21-day challenge timing mechanics.
+

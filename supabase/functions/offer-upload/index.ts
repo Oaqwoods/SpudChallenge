@@ -1,13 +1,15 @@
 // offer-upload — issues signed upload URLs for anonymous offer photos.
 // The bucket is private; only paths issued here (with a matching HMAC
-// submit token) can be attached to an offer at submission time.
+// submit token) can be attached to an offer at submission time. Upload
+// sessions are issued during prelaunch AND active (spec §17A); paused or
+// ended challenges stay blocked.
 
 import { captchaConfig, fetchCaptchaVerification, verifyCaptchaToken } from "../_shared/captcha.ts";
 import { corsHeaders, isOriginAllowed } from "../_shared/cors.ts";
 import { errorMessage } from "../_shared/logging.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
-import { challengeEnded, UUID_RE } from "../_shared/offer-validation.ts";
+import { offerGateReason, UUID_RE } from "../_shared/offer-validation.ts";
 import { issueOfferUpload } from "../_shared/storage.ts";
 
 const RATE_LIMIT = 20;
@@ -59,15 +61,21 @@ Deno.serve(async (req) => {
       offers_paused?: boolean;
       end_at?: string | null;
     } | null;
-    if (settings?.offers_paused) {
+    // No authoritative settings row: fail closed, as in the submission path.
+    if (!settings) {
+      return json({ error: "Offers are not open right now. Please check back soon." }, 409, cors);
+    }
+    // Shared gate order (paused → ended → closed). Upload sessions are
+    // issued during prelaunch AND active (prompt 39 / spec §17A).
+    const gate = offerGateReason(settings, Date.now());
+    if (gate === "paused") {
       return json({ error: "Offers are paused right now. Please check back soon." }, 503, cors);
     }
-    if (settings?.status !== "active") {
-      return json({ error: "Offers open when the challenge starts." }, 409, cors);
-    }
-    // Prompt 30: no upload sessions once the challenge has ended.
-    if (challengeEnded(settings ?? null, Date.now())) {
+    if (gate === "ended") {
       return json({ error: "The challenge has ended — offers are closed." }, 409, cors);
+    }
+    if (gate === "closed") {
+      return json({ error: "Offers are not open right now. Please check back soon." }, 409, cors);
     }
 
     const body = await req.json().catch(() => null);

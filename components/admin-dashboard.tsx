@@ -28,6 +28,7 @@ import {
   canSetStatus,
   countByStatus,
   filterOffers,
+  isPrelaunchOffer,
   sortOffers,
   toAdminOffer,
   type AdminOfferRow,
@@ -196,7 +197,12 @@ export function AdminDashboard() {
   }, []);
 
   const applyStatus = async (offer: AdminOfferRow, next: OfferStatus) => {
-    if (state.phase !== "ready" || !canSetStatus(offer.status, next)) return;
+    if (
+      state.phase !== "ready" ||
+      !canSetStatus(offer.status, next, state.settings.status)
+    ) {
+      return;
+    }
     const supabase = getSupabase();
     if (!supabase) return;
     setPendingId(offer.id);
@@ -395,6 +401,14 @@ export function AdminDashboard() {
           </p>
         ) : null}
 
+        {settings.status === "prelaunch" ? (
+          <p className="mt-4 border-[3px] border-accent bg-panel px-3 py-2 text-xs leading-relaxed text-accent">
+            Prelaunch: offers below are collected only and stay frozen at their
+            current status. Workflow actions unlock once you START CHALLENGE
+            NOW — collecting offers never starts the clock.
+          </p>
+        ) : null}
+
         {offers.length === 0 ? (
           <Panel className="mt-4 p-8 text-center">
             <p className="text-sm text-faded">
@@ -426,6 +440,8 @@ export function AdminDashboard() {
                     key={offer.id}
                     offer={offer}
                     busy={pendingId === offer.id}
+                    challengeStatus={settings.status}
+                    startAt={settings.start_at}
                     onStatus={(next) => void applyStatus(offer, next)}
                   />
                 ))}
@@ -475,10 +491,14 @@ export function AdminDashboard() {
 function OfferRow({
   offer,
   busy,
+  challengeStatus,
+  startAt,
   onStatus,
 }: {
   offer: AdminOfferRow;
   busy: boolean;
+  challengeStatus: string;
+  startAt: string | null;
   onStatus: (next: OfferStatus) => void;
 }) {
   const submitted = new Date(offer.created_at);
@@ -491,7 +511,14 @@ function OfferRow({
   return (
     <tr className="border-b border-edge align-top">
       <td className="px-3 py-3">
-        <StatusBadge status={offer.status} />
+        <div className="flex flex-col items-start gap-1">
+          <StatusBadge status={offer.status} />
+          {isPrelaunchOffer(offer.created_at, startAt) ? (
+            <span className="inline-block border-2 border-faded px-2 py-0.5 font-display text-[7px] uppercase text-faded sm:text-[8px]">
+              Prelaunch
+            </span>
+          ) : null}
+        </div>
       </td>
       <td className="px-3 py-3">
         <p className="text-foreground">{offer.item_name}</p>
@@ -513,7 +540,7 @@ function OfferRow({
           <Link href={`/admin/offers/?id=${offer.id}`} className={actionButtonClass}>
             Open
           </Link>
-          {availableActions(offer.status).map((action) => (
+          {availableActions(offer.status, challengeStatus).map((action) => (
             <button
               key={action.status}
               type="button"
