@@ -248,7 +248,10 @@ For Meta Events Manager **Test events**: open the site via the tool so the
 URL carries `?test_event_code=…`. The code survives internal navigations
 (session capture + URL restore) and is forwarded server-side, so both the
 browser Pixel events and the CAPI Leads show up tagged in the test tool
-and stay out of production statistics.
+and stay out of production statistics. As a temporary pre-launch fallback,
+the `META_TEST_EVENT_CODE` Edge Function secret also tags server-side Leads
+when no code arrives from the browser (a browser-attested code always wins;
+unset it after testing).
 
 ## Project structure
 

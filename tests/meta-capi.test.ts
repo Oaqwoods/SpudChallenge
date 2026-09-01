@@ -11,6 +11,7 @@ import {
   metaEventsUrl,
   parseMetaMeasurement,
   recordMetaLeadBestEffort,
+  resolveMetaTestEventCode,
   sanitizedMetaErrorDetail,
   sendMetaLead,
   type MetaLeadInput,
@@ -430,7 +431,8 @@ test("recordMetaLeadBestEffort logs the delivery outcome", async () => {
 // End-to-end for the Events Manager test flow: the exact meta object the
 // browser builds (steps 3–4) parses (steps 5–6) and lands as the TOP-LEVEL
 // test_event_code in the CAPI POST body (steps 7–8), and the delivery log
-// names the code so the tagging path is auditable in Edge Function logs.
+// records the code's PRESENCE (never the code itself) so the tagging path
+// is auditable in Edge Function logs.
 test("TEST52520 rides end-to-end into the top-level CAPI body field", async () => {
   const env = (key: string) =>
     key === "META_CAPI_ACCESS_TOKEN" ? "tok" : key === "META_DATASET_ID" ? "123" : undefined;
@@ -463,11 +465,13 @@ test("TEST52520 rides end-to-end into the top-level CAPI body field", async () =
   assert.equal(event.event_id, "shared-event-id");
 
   assert.deepEqual(info, [
-    "meta-capi Lead accepted (events_received=1, event_id=shared-event-id, test_event_code=TEST52520)",
+    "meta-capi Lead accepted (events_received=1, event_id=shared-event-id, test_event_code=present)",
   ]);
-  // The log line carries only the approved context — never fbp/fbc.
+  // The log line carries only the approved context — never fbp/fbc, the
+  // token, or the test code itself.
   assert.ok(!info[0].includes("fb.1.1700000000000.abcdef"));
   assert.ok(!info[0].includes("tok"));
+  assert.ok(!info[0].includes("TEST52520"));
 });
 
 test("recordMetaLeadBestEffort reuses the browser event_id for dedup", async () => {
@@ -509,4 +513,105 @@ test("recordMetaLeadBestEffort forwards the test session tag for CAPI events", a
   );
   const body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
   assert.equal(body.test_event_code, "EAG84721");
+});
+
+// --- optional META_TEST_EVENT_CODE server-side fallback ---------------------
+
+test("resolveMetaTestEventCode: browser code wins, env is the fallback, nothing hardcoded", () => {
+  const envWith = (code: string | undefined) => (key: string) =>
+    key === "META_TEST_EVENT_CODE" ? code : undefined;
+  // A valid browser-attested code always wins over the env fallback.
+  assert.equal(resolveMetaTestEventCode(envWith("ENVCODE1"), "TEST52520"), "TEST52520");
+  // No browser code → the env fallback applies (trimmed and validated).
+  assert.equal(resolveMetaTestEventCode(envWith(" ENVCODE1 ")), "ENVCODE1");
+  // Neither source → undefined: a normal production event.
+  assert.equal(resolveMetaTestEventCode(() => undefined), undefined);
+  assert.equal(resolveMetaTestEventCode(envWith(undefined)), undefined);
+  assert.equal(resolveMetaTestEventCode(envWith("   ")), undefined);
+  // Invalid values are dropped, never fatal — also never forwarded.
+  assert.equal(resolveMetaTestEventCode(envWith("bad/code")), undefined);
+  assert.equal(resolveMetaTestEventCode(envWith("x".repeat(65))), undefined);
+  assert.equal(resolveMetaTestEventCode(envWith("ENVCODE1"), "bad/code"), "ENVCODE1");
+});
+
+test("META_TEST_EVENT_CODE env fallback tags the CAPI body when the browser sends no code", async () => {
+  const captured: { init?: RequestInit } = {};
+  const info: string[] = [];
+  const env = (key: string) =>
+    key === "META_CAPI_ACCESS_TOKEN"
+      ? "tok"
+      : key === "META_DATASET_ID"
+        ? "123"
+        : key === "META_TEST_EVENT_CODE"
+          ? "ENVCODE1"
+          : undefined;
+  await recordMetaLeadBestEffort(
+    env,
+    { event_id: "e1" },
+    {
+      conversionType: "follower",
+      eventSourceUrl: "https://spudchallenge.online/",
+      clientIpAddress: null,
+      clientUserAgent: null,
+    },
+    okFetch(captured),
+    { log: (m) => info.push(m) },
+  );
+  const body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
+  assert.equal(body.test_event_code, "ENVCODE1");
+  const event = (body.data as Array<Record<string, unknown>>)[0];
+  assert.ok(!("test_event_code" in event), "the tag must stay top-level, not in the event");
+  assert.deepEqual(info, [
+    "meta-capi Lead accepted (events_received=1, event_id=e1, test_event_code=present)",
+  ]);
+  assert.ok(!info[0].includes("ENVCODE1"), "the code itself never enters the log");
+});
+
+test("browser-provided test code wins over the META_TEST_EVENT_CODE env fallback", async () => {
+  const captured: { init?: RequestInit } = {};
+  const env = (key: string) =>
+    key === "META_CAPI_ACCESS_TOKEN"
+      ? "tok"
+      : key === "META_DATASET_ID"
+        ? "123"
+        : key === "META_TEST_EVENT_CODE"
+          ? "ENVCODE1"
+          : undefined;
+  await recordMetaLeadBestEffort(
+    env,
+    { event_id: "shared-event-id", test_event_code: "TEST52520" },
+    {
+      conversionType: "follower",
+      eventSourceUrl: "https://spudchallenge.online/",
+      clientIpAddress: null,
+      clientUserAgent: null,
+    },
+    okFetch(captured),
+  );
+  const body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
+  assert.equal(body.test_event_code, "TEST52520");
+});
+
+test("no test code anywhere sends a normal production CAPI event", async () => {
+  const captured: { init?: RequestInit } = {};
+  const info: string[] = [];
+  const env = (key: string) =>
+    key === "META_CAPI_ACCESS_TOKEN" ? "tok" : key === "META_DATASET_ID" ? "123" : undefined;
+  await recordMetaLeadBestEffort(
+    env,
+    { event_id: "e1" },
+    {
+      conversionType: "follower",
+      eventSourceUrl: "https://spudchallenge.online/",
+      clientIpAddress: null,
+      clientUserAgent: null,
+    },
+    okFetch(captured),
+    { log: (m) => info.push(m) },
+  );
+  const body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
+  assert.ok(!("test_event_code" in body), "no tag anywhere in the request");
+  assert.deepEqual(info, [
+    "meta-capi Lead accepted (events_received=1, event_id=e1, test_event_code=absent)",
+  ]);
 });

@@ -84,6 +84,22 @@ export function parseMetaMeasurement(value: unknown): MetaMeasurement | null {
   return measurement;
 }
 
+// Resolves the "Test events" tag for one CAPI call. A valid browser-attested
+// code always wins; otherwise the OPTIONAL META_TEST_EVENT_CODE Edge Function
+// secret provides a temporary server-side fallback so pre-launch tests can be
+// tagged even when no code arrives from the browser. Codes are never
+// hardcoded: with neither source present the Lead goes out as a normal
+// production event. Invalid values are dropped, never fatal.
+export function resolveMetaTestEventCode(
+  env: (key: string) => string | undefined,
+  browserCode?: string,
+): string | undefined {
+  if (browserCode && TEST_EVENT_CODE_RE.test(browserCode)) return browserCode;
+  const envCode = cleanMetaField(env("META_TEST_EVENT_CODE"), 64);
+  if (envCode && TEST_EVENT_CODE_RE.test(envCode)) return envCode;
+  return undefined;
+}
+
 export interface MetaLeadInput {
   conversionType: MetaConversionType;
   eventId: string;
@@ -207,13 +223,11 @@ export interface MetaCapiLoggers {
 }
 
 // Sanitized context appended to every meta-capi log line. Only values that
-// are safe and diagnostic: the dedup event_id (a random UUID) and the
-// Events Manager test code (a short-lived, non-secret test tag). Deliberately
-// NOT logged: fbp/fbc, IP, user agent, or any submission content.
-function measurementContext(measurement: MetaMeasurement): string {
-  const testCode = measurement.test_event_code
-    ? `test_event_code=${measurement.test_event_code}`
-    : "test_event_code=absent";
+// are safe and diagnostic: the dedup event_id (a random UUID) and WHETHER a
+// Test events code was applied — never the code itself. Deliberately NOT
+// logged: fbp/fbc, IP, user agent, or any submission content.
+function measurementContext(measurement: MetaMeasurement, testEventCode?: string): string {
+  const testCode = testEventCode ? "test_event_code=present" : "test_event_code=absent";
   return `event_id=${measurement.event_id}, ${testCode}`;
 }
 
@@ -233,7 +247,8 @@ export async function recordMetaLeadBestEffort(
   const log = loggers.log ?? ((message) => console.log(message));
   const logError = loggers.logError ?? ((message) => console.error(message));
   if (!measurement) return;
-  const context = measurementContext(measurement);
+  const testEventCode = resolveMetaTestEventCode(env, measurement.test_event_code);
+  const context = measurementContext(measurement, testEventCode);
   const config = metaCapiConfig(env);
   if (!config) {
     // Consented conversion with no CAPI secrets: a silent skip here means
@@ -251,7 +266,7 @@ export async function recordMetaLeadBestEffort(
         eventId: measurement.event_id,
         fbp: measurement.fbp,
         fbc: measurement.fbc,
-        testEventCode: measurement.test_event_code,
+        testEventCode,
       },
       fetchImpl,
     );

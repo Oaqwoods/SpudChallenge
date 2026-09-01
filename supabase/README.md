@@ -170,6 +170,24 @@ forms and pass the widget token through). Verification is fail-closed. The
 token-authenticated unsubscribe flow is deliberately exempt. Unset the
 secrets to disable again.
 
+### Optional (Meta Test events tagging; temporary, pre-launch only)
+
+While verifying the Meta integration before launch, `META_TEST_EVENT_CODE`
+tags every server-side CAPI Lead from `follow-signup`/`submit-offer` with an
+Events Manager test code — even when the browser request carries none:
+
+```bash
+supabase secrets set META_TEST_EVENT_CODE=<code from Events Manager → Test events>
+```
+
+A valid code attested by the browser always wins. The variable is temporary
+and never required in production: with no valid code from either source the
+Lead goes out as a normal production event. Remove it once testing is done:
+
+```bash
+supabase secrets unset META_TEST_EVENT_CODE
+```
+
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
 
 ### Deploy
