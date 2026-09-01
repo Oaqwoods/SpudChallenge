@@ -52,8 +52,39 @@ export default function PrivacyPage() {
           </p>
           <p>
             <strong className="text-foreground">Everything else:</strong> lightweight, privacy-light
-            analytics — page views and clicks with pathname and campaign tags.
-            No cookies, no advertising identifiers.
+            first-party analytics — page views and clicks with pathname and
+            campaign tags. No cookies, no advertising identifiers. These run
+            regardless of your Meta advertising-measurement choice below.
+          </p>
+        </Section>
+
+        <Section title="Meta advertising measurement (optional)">
+          <p>
+            If you explicitly choose <strong className="text-foreground">Allow</strong> in the
+            &ldquo;Meta ad measurement&rdquo; notice, the site uses the Meta
+            (Facebook) Pixel in your browser and the Meta Conversions API on
+            the server to measure advertising. Meta is off before you choose
+            and stays off if you decline.
+          </p>
+          <p>
+            With your consent, Meta may set or read advertising-measurement
+            cookies in your browser (such as <code>_fbp</code> / <code>_fbc</code>)
+            and receive: a PageView signal, the fact that a follower signup or
+            an offer submission succeeded (tagged &ldquo;follower&rdquo; or
+            &ldquo;trade_offer&rdquo;), the page URL, your IP address and
+            browser type, those Meta cookies if present, and a random event ID
+            used to avoid counting the same conversion twice.
+          </p>
+          <p>
+            We never send Meta your email address, phone number, name, item
+            descriptions, offer details, uploaded photos or files, or any
+            other form contents. Meta processes the measurement data under its
+            own policies.
+          </p>
+          <p>
+            You can change your choice at any time with the &ldquo;Meta Ad
+            Measurement Settings&rdquo; link in the footer. The choice is
+            stored only in your own browser.
           </p>
         </Section>
 
@@ -92,8 +123,10 @@ export default function PrivacyPage() {
         <Section title="What we do not do">
           <p>
             We do not sell, rent, or share your personal data with third
-            parties. We do not use advertising trackers. Nothing on this site
-            is a guarantee of valuation, acceptance, safety, tax treatment, or
+            parties. The only third-party measurement is the optional,
+            consent-gated Meta advertising measurement described above — we do
+            not embed any other advertising trackers. Nothing on this site is
+            a guarantee of valuation, acceptance, safety, tax treatment, or
             legal ownership.
           </p>
         </Section>

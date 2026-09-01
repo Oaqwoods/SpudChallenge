@@ -160,6 +160,16 @@ prompt-29 valuation/verification-documents follow-ups 2026-08-25.
   created. They intentionally include private recordkeeping columns (contact
   data, admin notes, BTC verification fields) because they are the
   operator's own compliance/backup records.
+- **Meta advertising measurement is consent-gated and PII-free (prompt 40).**
+  The Meta Pixel loads only after an explicit Allow (stored in the visitor's
+  own browser; off by default and off after Decline), and the Conversions API
+  fires only when the submission itself carries that consent attestation. The
+  only data sent to Meta is a `Lead` event tagged `follower`/`trade_offer`,
+  the page URL, a deduplicated event ID, client IP/user-agent and Meta's own
+  `_fbp`/`_fbc` cookies (unhashed) — never emails, phone numbers, names,
+  offer text, item descriptions, photos or files. Meta delivery is
+  best-effort with a timeout: a Meta failure can never fail a signup or an
+  offer, and errors are logged sanitized via `errorMessage()`.
 
 ## Known limitations
 
@@ -190,9 +200,11 @@ prompt-29 valuation/verification-documents follow-ups 2026-08-25.
 ## Operational precautions
 
 - Secrets (`SUPABASE_SERVICE_ROLE_KEY`, `PREFERENCE_TOKEN_SECRET`,
-  `RESEND_API_KEY`) live only in Supabase Edge Function secrets — never in
-  `.env` files committed to the repo, never in `NEXT_PUBLIC_*` variables.
-  Rotate all three if any is suspected leaked; also rotate
+  `RESEND_API_KEY`, `META_CAPI_ACCESS_TOKEN`) live only in Supabase Edge
+  Function secrets — never in `.env` files committed to the repo, never in
+  `NEXT_PUBLIC_*` variables, never in the static export or workflow files.
+  (`NEXT_PUBLIC_META_PIXEL_ID` is public by design — it is the Pixel ID.)
+  Rotate them all if any is suspected leaked; also rotate
   `PREFERENCE_TOKEN_SECRET` after a leak of unsubscribe links is suspected
   (it invalidates all outstanding unsubscribe links).
 - Admin accounts are created privately via the Supabase dashboard and added

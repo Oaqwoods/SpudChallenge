@@ -206,10 +206,10 @@ emergencies), see [OPERATIONS.md](OPERATIONS.md).
 
 ## Analytics
 
-Lightweight, privacy-light, first-party telemetry — no third-party SDKs, no
-cookies, no identifiers. The client (`lib/analytics.ts`) fires events
-fire-and-forget to the `track-event` Edge Function, which stores them in
-`analytics_events` (admin-readable, service-role-writable).
+Lightweight, privacy-light, first-party telemetry — no cookies, no
+identifiers. The client (`lib/analytics.ts`) fires events fire-and-forget to
+the `track-event` Edge Function, which stores them in `analytics_events`
+(admin-readable, service-role-writable).
 
 Tracked events: `page_view`, `follow_cta_clicked`, `follower_submitted`,
 `follower_wall_opt_in`, `potential_trader_captured`, `offer_cta_clicked`,
@@ -220,6 +220,29 @@ Tracked events: `page_view`, `follow_cta_clicked`, `follower_submitted`,
 Never recorded: emails, phone numbers, offer descriptions, uploaded files or
 any other sensitive form data. The event allowlist and length caps in the
 Edge Function make that structural.
+
+### Meta advertising measurement (optional, consent-gated)
+
+A separate, opt-in measurement system for Meta ads (playbook prompt 40).
+Visitors are asked once via a non-blocking banner; Meta is OFF before a
+choice and after a Decline. With an explicit Allow:
+
+- the Meta Pixel (`NEXT_PUBLIC_META_PIXEL_ID`, public GitHub Actions
+  variable) loads in the browser — standard init only, no Advanced
+  Matching, PageView after init;
+- successful follower signups and offer submissions fire a Meta `Lead`
+  (`conversion_type` of `follower` / `trade_offer`) in the browser **and**
+  server-side through the Conversions API from the `follow-signup` /
+  `submit-offer` Edge Functions, deduplicated by one shared `event_id`;
+- only the conversion tag, page URL, event ID, IP/user-agent and Meta's own
+  `_fbp`/`_fbc` cookies are transmitted — never emails, phone numbers,
+  names, offer text or photos.
+
+Secrets `META_CAPI_ACCESS_TOKEN` and `META_DATASET_ID` live only in
+Supabase Edge Function secrets (Graph API version pinned to v25.0 in
+`supabase/functions/_shared/meta-capi.ts`). Meta delivery is best-effort:
+a Meta failure can never fail a signup or an offer. See
+[SECURITY.md](SECURITY.md) and the privacy page for details.
 
 ## Project structure
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MetaConsentSettingsLink } from "@/components/meta-consent";
 import { SpudMascot } from "@/components/spud-mascot";
 
 const LEGAL_LINKS: Array<[string, string]> = [
@@ -20,6 +21,7 @@ export function Footer() {
               {label}
             </Link>
           ))}
+          <MetaConsentSettingsLink />
         </nav>
         <p className="max-w-md text-[11px] leading-relaxed text-faded">
           Not a marketplace. Offers are reviewed manually, trades happen offline,

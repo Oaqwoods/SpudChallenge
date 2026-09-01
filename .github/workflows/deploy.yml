@@ -42,6 +42,10 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          # Meta Pixel ID is public by design (prompt 40). The CAPI access
+          # token lives only in Supabase Edge Function secrets — it must
+          # never enter this workflow or the static export.
+          NEXT_PUBLIC_META_PIXEL_ID: ${{ vars.NEXT_PUBLIC_META_PIXEL_ID }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

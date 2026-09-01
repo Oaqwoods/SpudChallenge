@@ -1400,3 +1400,44 @@ Tax/accounting recordkeeping:
 
 - Preserve the records needed to establish basis and fair-market value for every BTC trade: BTC amount, USD fair-market value at completion, valuation timestamp, valuation source, and verification evidence.
 - Admin CSV exports (§32) include these fields for admin use only.
+
+## 39. Meta Advertising Measurement (Pixel + Conversions API)
+
+Prompt 40. Meta is an **additional**, consent-gated measurement system. It never replaces or modifies the first-party analytics of §13 (`lib/analytics.ts`, `follower_submitted`, `offer_submitted`, UTM attribution all remain exactly as-is), and it never gates or affects follower signup or offer submission themselves.
+
+### 39.1 Consent gate
+
+- Meta measurement is OFF until the visitor makes an explicit choice, and stays OFF if they decline. The consent choice is stored only in the visitor's browser (`localStorage`), never in the database.
+- A non-manipulative banner offers **Allow** and **Decline** with equal weight, links to the Privacy Policy, and does not block reading the site. The footer exposes a way to reopen the choice at any time.
+- First-party analytics (§13) run regardless of the Meta choice.
+
+### 39.2 Meta Pixel (browser)
+
+- Loaded from `NEXT_PUBLIC_META_PIXEL_ID` (public GitHub Actions variable, inlined at build time). The helper safely no-ops when the variable is absent or consent is not granted.
+- Standard initialization only — **no Automatic Advanced Matching**, no form-field scraping, no customer-information parameters on `fbq('init')`.
+- A normal `PageView` may fire after initialization. The Pixel initializes only after consent is granted (including grants made during the session).
+- Conversion event: the Meta standard event **Lead**, fired **only after** the backend confirms a successful follower signup or offer submission, with `custom_data.conversion_type` of `"follower"` or `"trade_offer"` respectively. Views, clicks, form opens, and pre-confirmation submits never fire a Lead.
+
+### 39.3 Meta Conversions API (server)
+
+- Sent from the existing `follow-signup` and `submit-offer` Edge Functions via the shared `supabase/functions/_shared/meta-capi.ts` helper.
+- Graph API version: **v25.0** (released 2026-02-18, available until 2028-07-29 per Meta's changelog at selection time). Endpoint: `POST https://graph.facebook.com/v25.0/{META_DATASET_ID}/events`.
+- Secrets: `META_CAPI_ACCESS_TOKEN` and `META_DATASET_ID` are Supabase Edge Function secrets only. They never enter the repo, the static export, client responses, or logs (errors are sanitized through `errorMessage()`).
+
+### 39.4 Lead event flow and deduplication
+
+1. When Meta consent is granted, the browser generates a cryptographically random `event_id` (UUID) before submitting, and reads the Meta attribution cookies `_fbp`/`_fbc` if present.
+2. The follower/offer request carries an optional `meta` metadata object: `{ consented: true, event_id, fbp?, fbc? }`. Without consent, nothing Meta-related is attached.
+3. The Edge Function performs its normal validation and database operation unchanged. Missing/invalid `meta` metadata never fails a submission; missing `_fbp`/`_fbc` never fails anything.
+4. Only after the database write succeeds, and only when `meta.consented` is true, the function sends one CAPI `Lead` with the same `event_id`.
+5. Only after the browser receives the successful response does it fire the Pixel `Lead` with the identical `event_id` — Meta deduplicates browser + server events on `event_id`.
+
+CAPI payload (per Lead): `event_name: "Lead"`, `event_time` (server Unix seconds), `event_id`, `event_source_url` (canonical page for the conversion: site root for follower, `/offer/` for offers), `action_source: "website"`, `custom_data: { conversion_type }`, and `user_data` limited to `client_ip_address`, `client_user_agent`, `fbp`, `fbc` — all sent **unhashed**; no email, phone, names, DOB, gender, address, ZIP, offer text, item descriptions, photo metadata, or any private/admin data is ever transmitted.
+
+### 39.5 Failure isolation
+
+Meta delivery is strictly best-effort. The CAPI call is awaited with a short timeout inside the handler but is fully caught: a Meta timeout, rejection, outage, or misconfiguration never fails a signup/offer, never retries by creating duplicate application records, and produces at most a sanitized server-side error log. Pixel failures are silently ignored on the client.
+
+### 39.6 Privacy documentation
+
+`/privacy/` truthfully describes the Meta Pixel, the Conversions API, Meta advertising-measurement cookies/identifiers, the exact limited fields sent, the consent gate, and what is never sent to Meta — while keeping the pending-attorney-review disclaimer.

@@ -9,7 +9,9 @@
 import { captchaConfig, fetchCaptchaVerification, verifyCaptchaToken } from "../_shared/captcha.ts";
 import { corsHeaders, isOriginAllowed } from "../_shared/cors.ts";
 import { errorMessage } from "../_shared/logging.ts";
+import { parseMetaMeasurement, recordMetaLeadBestEffort } from "../_shared/meta-capi.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
+import { siteUrl } from "../_shared/resend.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
 import {
   offerGateReason,
@@ -281,6 +283,23 @@ Deno.serve(async (req) => {
       );
       if (filesInsert.error) throw filesInsert.error;
     }
+
+    // Best-effort Meta Conversions API Lead (prompt 40 / spec §39): only
+    // after the offer + files were written, only with browser-attested
+    // consent, and any Meta failure is swallowed so the offer is unaffected.
+    const offerIp = clientIp(req);
+    await recordMetaLeadBestEffort(
+      (key) => Deno.env.get(key),
+      parseMetaMeasurement(record.meta),
+      {
+        conversionType: "trade_offer",
+        eventSourceUrl: `${siteUrl()}/offer/`,
+        clientIpAddress: offerIp === "unknown" ? null : offerIp,
+        clientUserAgent: req.headers.get("user-agent"),
+      },
+      fetch,
+      (message) => console.error("submit-offer " + message),
+    );
 
     // `prelaunch` tells the form which confirmation copy to show; the offer
     // itself is identical in both phases (status "new", collection only).

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Press_Start_2P } from "next/font/google";
 import { PageViewTracker } from "@/components/analytics-tracker";
+import { MetaConsentBanner, MetaPixelLoader } from "@/components/meta-consent";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -66,6 +67,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <PageViewTracker />
+        <MetaPixelLoader />
+        <MetaConsentBanner />
         {children}
       </body>
     </html>

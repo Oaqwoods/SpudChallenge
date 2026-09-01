@@ -1577,3 +1577,437 @@ Do not add unrelated features.
 Do not redesign the site.
 Do not change the 21-day challenge timing mechanics.
 
+# PROMPT 40 — META PIXEL + CONVERSIONS API MEASUREMENT
+
+We are now implementing Meta advertising measurement for the Spud Challenge.
+
+Production:
+https://spudchallenge.online
+
+Architecture:
+- Next.js static export hosted on GitHub Pages
+- Supabase backend / Edge Functions
+- Existing first-party analytics must remain intact
+- Existing follower and trade-offer workflows must remain intact
+
+META CONFIGURATION ALREADY COMPLETED BY THE OPERATOR:
+
+Meta Dataset / Pixel ID:
+1055342657299625
+
+The following Supabase secrets have already been configured:
+- META_CAPI_ACCESS_TOKEN
+- META_DATASET_ID
+
+NEVER ask the operator to paste or reveal META_CAPI_ACCESS_TOKEN.
+NEVER print, log, expose, commit or return that token.
+
+The GitHub Actions repository variable:
+
+NEXT_PUBLIC_META_PIXEL_ID
+
+has also been configured with the Pixel ID.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Add Meta Pixel browser measurement plus Meta Conversions API
+server-side measurement for two successful conversion types:
+
+1. Successful follower signup
+2. Successful trade-offer submission
+
+Both should use the Meta standard event:
+
+Lead
+
+Distinguish them with:
+
+conversion_type = "follower"
+
+and
+
+conversion_type = "trade_offer"
+
+Do NOT send a Lead merely because somebody:
+- views the page
+- clicks the Follow button
+- opens the offer form
+- starts filling a form
+- clicks Submit before backend confirmation
+
+A Lead occurs only after the existing backend operation reports a
+successful follower signup or successful offer submission.
+
+==================================================
+FIRST: AUDIT BEFORE EDITING
+==================================================
+
+Inspect the actual current code before making changes.
+
+Pay particular attention to:
+
+- components/follow-section.tsx
+- components/offer-form.tsx
+- lib/analytics.ts
+- app layout / root client components
+- supabase/functions/follow-signup
+- supabase/functions/submit-offer
+- .github/workflows/deploy.yml
+- app/privacy/page.tsx
+- existing CORS, validation, rate limiting and security helpers
+
+Confirm where follower_submitted and offer_submitted currently fire.
+
+Do not redesign the submission architecture unnecessarily.
+
+==================================================
+META PIXEL — BROWSER SIDE
+==================================================
+
+Implement Meta Pixel using:
+
+NEXT_PUBLIC_META_PIXEL_ID
+
+Requirements:
+
+- Works with the existing Next.js static export.
+- No Next.js runtime/server dependency.
+- Pixel helper should safely no-op if the environment variable is absent.
+- Do not enable Meta Automatic Advanced Matching.
+- Do not scrape form fields.
+- Do not pass email addresses.
+- Do not pass phone numbers.
+- Do not pass names.
+- Do not pass offer descriptions.
+- Do not pass uploaded image information.
+- Do not pass location/form PII to Meta.
+
+A normal Meta PageView may be sent after Pixel initialization.
+
+For conversions, browser Meta Pixel must send:
+
+event_name = Lead
+
+with custom event data:
+
+conversion_type = follower
+
+OR
+
+conversion_type = trade_offer
+
+The Lead must fire only after the corresponding backend submission
+has succeeded.
+
+==================================================
+PIXEL + CAPI DEDUPLICATION
+==================================================
+
+Browser and server versions of the same Lead must use the SAME
+unique Event ID.
+
+Implement robust deduplication.
+
+Preferred architecture:
+
+1. Generate a cryptographically/randomly unique event_id on the
+   browser before the submission request.
+
+2. Pass that event_id as OPTIONAL Meta measurement metadata with
+   the existing follower-signup or submit-offer request.
+
+3. The existing Supabase Edge Function performs its normal database
+   operation.
+
+4. ONLY AFTER the database operation succeeds, the Edge Function
+   sends the server-side Meta Lead through Conversions API using
+   that event_id.
+
+5. ONLY AFTER the browser receives successful backend confirmation,
+   fire the browser Meta Pixel Lead using that same event_id.
+
+Do not send a CAPI Lead before the underlying application operation
+has succeeded.
+
+Do not create duplicate application records for tracking purposes.
+
+Tracking failure must NEVER cause follower signup or trade offer
+submission to fail.
+
+==================================================
+META CAPI SERVER EVENT
+==================================================
+
+Send the server-side Lead through Meta Conversions API using the
+existing Supabase secret:
+
+META_CAPI_ACCESS_TOKEN
+
+and:
+
+META_DATASET_ID
+
+Use Meta's currently supported Graph API version appropriate for
+the implementation and document the version selected.
+
+Do not guess silently if the version cannot be verified.
+
+Payload should contain only the approved information needed for
+this integration.
+
+For each successful Lead:
+
+event_name:
+Lead
+
+event_time:
+current server Unix timestamp
+
+event_id:
+same event ID used by browser Pixel
+
+event_source_url:
+the actual/canonical page URL associated with the submission
+
+action_source:
+website
+
+custom_data:
+{
+  conversion_type: "follower"
+}
+
+OR:
+
+{
+  conversion_type: "trade_offer"
+}
+
+Approved user_data fields:
+
+- client_ip_address
+- client_user_agent
+- fbp, if available
+- fbc, if available
+
+Do NOT hash IP, user agent, fbp or fbc.
+
+Do NOT include:
+
+- email
+- phone
+- first name
+- last name
+- DOB
+- gender
+- address
+- ZIP
+- offer text
+- trade item description
+- photo metadata
+- uploaded files
+- private admin data
+
+Never include the CAPI access token in logs or client responses.
+
+==================================================
+FBP / FBC
+==================================================
+
+Safely capture existing Meta browser attribution identifiers when
+available:
+
+_fbp
+_fbc
+
+Pass them as optional tracking metadata with the submission.
+
+Do not make either one required.
+
+Do not cause a submission to fail if cookies are unavailable,
+blocked or declined.
+
+==================================================
+PRIVACY / CONSENT
+==================================================
+
+IMPORTANT:
+
+The current Privacy Policy says the site does not use cookies,
+advertising identifiers or advertising trackers.
+
+That becomes inaccurate after this integration.
+
+Update app/privacy/page.tsx so it truthfully describes:
+
+- existing first-party analytics
+- use of Meta Pixel
+- use of Meta Conversions API
+- advertising measurement
+- Meta cookies/advertising identifiers where applicable
+- the specific limited conversion information being sent
+- that trade descriptions, uploaded images, phone numbers and
+  other private offer content are not sent to Meta
+
+Preserve the existing "pending attorney review" disclaimer.
+
+Implement a simple, non-manipulative Meta advertising-measurement
+consent mechanism unless an equivalent mechanism already exists.
+
+Preferred behavior:
+
+- Meta tracking OFF before a visitor makes a choice.
+- Visitor can choose Allow or Decline.
+- Choice stored locally.
+- Existing privacy-light first-party analytics may continue
+  independently.
+- Meta Pixel initializes only when Meta measurement is allowed.
+- Meta CAPI measurement metadata/events are sent only when Meta
+  measurement is allowed.
+- Provide a reasonable way to change the choice later.
+- Link to the Privacy Policy.
+
+Do not use a dark pattern.
+Allow and Decline should both be clear.
+
+==================================================
+EXISTING ANALYTICS
+==================================================
+
+DO NOT replace or remove:
+
+lib/analytics.ts
+
+or the existing:
+
+follower_submitted
+offer_submitted
+
+events.
+
+Meta is an additional measurement system, not a replacement.
+
+Existing UTM attribution must continue functioning exactly as it
+does today.
+
+==================================================
+GITHUB PAGES BUILD
+==================================================
+
+Update:
+
+.github/workflows/deploy.yml
+
+so the build receives:
+
+NEXT_PUBLIC_META_PIXEL_ID: ${{ vars.NEXT_PUBLIC_META_PIXEL_ID }}
+
+Do not place secrets in the workflow.
+
+NEXT_PUBLIC_META_PIXEL_ID is intentionally public.
+
+META_CAPI_ACCESS_TOKEN must NEVER enter the GitHub Pages build.
+
+==================================================
+FAILURE BEHAVIOR
+==================================================
+
+Meta must be best-effort measurement.
+
+If Meta:
+- times out
+- rejects an event
+- is unavailable
+- has a configuration problem
+
+the core Spud Challenge submission must still succeed.
+
+Sanitized errors may be logged server-side.
+
+Never log:
+- access token
+- full submission payload
+- private form data
+
+==================================================
+TESTING
+==================================================
+
+Add/update tests covering at minimum:
+
+1. Pixel helper safely no-ops without Pixel ID.
+2. Pixel Lead does not fire before backend success.
+3. Successful follower signup fires one browser Lead.
+4. Successful offer submission fires one browser Lead.
+5. follower conversion_type is correct.
+6. trade_offer conversion_type is correct.
+7. browser/server use identical event_id.
+8. CAPI receives only approved fields.
+9. no email/phone/name/offer text/photo metadata is transmitted.
+10. missing fbp/fbc does not break submission.
+11. Meta API failure does not break normal submission.
+12. consent declined prevents Meta Pixel/CAPI measurement.
+13. existing first-party analytics still fires.
+14. static export succeeds.
+15. no secret appears in generated /out files.
+16. no secret appears in source control.
+17. existing prelaunch offer behavior remains unchanged.
+
+Run:
+
+- typecheck
+- tests
+- lint if configured
+- production build/static export
+
+Inspect the generated out/ directory for accidental secret leakage.
+
+==================================================
+DEPLOYMENT
+==================================================
+
+After all local checks pass:
+
+1. Tell me exactly which files changed.
+2. Tell me whether a database migration is required.
+   Prefer NO migration unless genuinely necessary.
+3. Tell me which Supabase Edge Functions need redeployment.
+4. If the linked Supabase CLI is available, deploy only the changed
+   functions after tests pass.
+5. Commit and push the static-site changes to main so the existing
+   GitHub Pages workflow deploys them.
+6. Verify the GitHub Actions build succeeds.
+
+Do NOT:
+- create a Meta advertising campaign
+- create an ad set
+- create an ad
+- activate advertising
+- change a Meta budget
+- request a Marketing API token
+
+This prompt is measurement integration ONLY.
+
+==================================================
+FINAL REPORT
+==================================================
+
+When complete, report:
+
+1. files modified/created
+2. Meta architecture implemented
+3. Edge Functions deployed
+4. GitHub Pages deployment status
+5. tests/build results
+6. whether Pixel PageView is ready
+7. whether follower Lead is ready
+8. whether trade_offer Lead is ready
+9. any remaining manual Meta Events Manager test step
+10. any blocker before advertising
+
+Then STOP.
+
+Do not begin Marketing API campaign automation.
+
