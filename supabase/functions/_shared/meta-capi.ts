@@ -27,10 +27,17 @@ const MAX_EVENT_ID_LENGTH = 128;
 
 export type MetaConversionType = "follower" | "trade_offer";
 
+// Events Manager "Test events" codes: short alphanumerics only. Events sent
+// with this tag appear in Meta's test tool and are excluded from production
+// statistics — both the browser Pixel (via the page URL) and the CAPI call
+// must carry the SAME code for a test session to show the deduplicated pair.
+const TEST_EVENT_CODE_RE = /^[A-Za-z0-9]{1,64}$/;
+
 export interface MetaMeasurement {
   event_id: string;
   fbp?: string;
   fbc?: string;
+  test_event_code?: string;
 }
 
 export interface MetaCapiConfig {
@@ -70,6 +77,10 @@ export function parseMetaMeasurement(value: unknown): MetaMeasurement | null {
   if (fbp) measurement.fbp = fbp;
   const fbc = cleanMetaField(record.fbc, MAX_META_FIELD_LENGTH);
   if (fbc) measurement.fbc = fbc;
+  const testEventCode = cleanMetaField(record.test_event_code, 64);
+  if (testEventCode && TEST_EVENT_CODE_RE.test(testEventCode)) {
+    measurement.test_event_code = testEventCode;
+  }
   return measurement;
 }
 
@@ -81,6 +92,9 @@ export interface MetaLeadInput {
   clientUserAgent: string | null;
   fbp?: string;
   fbc?: string;
+  // Optional Events Manager "Test events" tag — travels at the TOP LEVEL of
+  // the CAPI request body (not inside the event object).
+  testEventCode?: string;
 }
 
 // The exact approved CAPI event payload, built in one place so the field
@@ -136,13 +150,17 @@ export async function sendMetaLead(
     input,
     (options.nowSeconds ?? (() => Math.floor(Date.now() / 1000)))(),
   );
+  const body: Record<string, unknown> = { data: [event] };
+  if (input.testEventCode && TEST_EVENT_CODE_RE.test(input.testEventCode)) {
+    body.test_event_code = input.testEventCode;
+  }
   const res = await fetchImpl(metaEventsUrl(config.datasetId, options.graphVersion), {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${config.accessToken}`,
     },
-    body: JSON.stringify({ data: [event] }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(options.timeoutMs ?? META_CAPI_TIMEOUT_MS),
   });
   if (!res.ok) {
@@ -161,7 +179,7 @@ export async function sendMetaLead(
 export async function recordMetaLeadBestEffort(
   env: (key: string) => string | undefined,
   measurement: MetaMeasurement | null,
-  input: Omit<MetaLeadInput, "eventId" | "fbp" | "fbc">,
+  input: Omit<MetaLeadInput, "eventId" | "fbp" | "fbc" | "testEventCode">,
   fetchImpl: typeof fetch,
   logError: (message: string) => void = (message) => console.error(message),
 ): Promise<void> {
@@ -176,6 +194,7 @@ export async function recordMetaLeadBestEffort(
         eventId: measurement.event_id,
         fbp: measurement.fbp,
         fbc: measurement.fbc,
+        testEventCode: measurement.test_event_code,
       },
       fetchImpl,
     );

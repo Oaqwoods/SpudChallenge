@@ -9,14 +9,17 @@
 import Link from "next/link";
 import { useEffect, useSyncExternalStore } from "react";
 import {
+  captureMetaTestEventCode,
   injectMetaPixel,
   META_CONSENT_CHANGED_EVENT,
   META_CONSENT_REOPEN_EVENT,
   metaConsentBannerVisible,
   metaMeasurementAllowed,
   metaPixelConfigured,
+  readMetaTestEventCode,
   requestMetaConsentChoiceChange,
   trackMetaPageView,
+  withMetaTestEventCode,
   writeMetaConsent,
 } from "@/lib/meta";
 
@@ -86,6 +89,14 @@ export function MetaConsentBanner() {
 
 export function MetaPixelLoader() {
   useEffect(() => {
+    // Meta "Test events": the Pixel tags events from ?test_event_code= in
+    // the page URL only, so restore the captured code after internal
+    // navigations (e.g. homepage → /offer/) before any event can fire.
+    const code = captureMetaTestEventCode();
+    if (code && !readMetaTestEventCode(window.location.search)) {
+      window.history.replaceState(null, "", withMetaTestEventCode(window.location.href, code));
+    }
+
     const startIfAllowed = () => {
       // Consent first: the Pixel script is only ever injected after an
       // explicit Allow, including a grant made during this session.

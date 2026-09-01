@@ -10,6 +10,7 @@ import { join } from "node:path";
 import {
   META_CONSENT_STORAGE_KEY,
   buildMetaRequestMetadata,
+  captureMetaTestEventCode,
   fireMetaLead,
   injectMetaPixel,
   metaMeasurementAllowed,
@@ -18,7 +19,10 @@ import {
   newMetaEventId,
   parseMetaConsent,
   readMetaAttributionCookies,
+  readMetaTestEventCode,
   trackMetaLead,
+  validateMetaTestEventCode,
+  withMetaTestEventCode,
 } from "../lib/meta.ts";
 
 // --- fakes -------------------------------------------------------------------
@@ -30,6 +34,19 @@ function fakeStorage(initial?: string): {
 } {
   const store = new Map<string, string>();
   if (initial !== undefined) store.set(META_CONSENT_STORAGE_KEY, initial);
+  return {
+    store,
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => void store.set(key, value),
+  };
+}
+
+function fakeSession(): {
+  store: Map<string, string>;
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+} {
+  const store = new Map<string, string>();
   return {
     store,
     getItem: (key) => store.get(key) ?? null,
@@ -77,15 +94,16 @@ test("Meta measurement is off before a choice and after a Decline", () => {
 });
 
 test("buildMetaRequestMetadata is null without consent", () => {
-  assert.equal(buildMetaRequestMetadata(fakeStorage()), null);
-  assert.equal(buildMetaRequestMetadata(fakeStorage("declined")), null);
+  assert.equal(buildMetaRequestMetadata(fakeStorage(), fakeSession(), ""), null);
+  assert.equal(buildMetaRequestMetadata(fakeStorage("declined"), fakeSession(), ""), null);
 });
 
 test("buildMetaRequestMetadata builds consent-tagged metadata after Allow", () => {
-  const meta = buildMetaRequestMetadata(fakeStorage("allowed"));
+  const meta = buildMetaRequestMetadata(fakeStorage("allowed"), fakeSession(), "");
   assert.ok(meta);
   assert.equal(meta.consented, true);
   assert.match(meta.event_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  assert.equal(meta.test_event_code, undefined);
 });
 
 test("newMetaEventId uses the injected UUID source", () => {
@@ -182,6 +200,67 @@ test("missing or blocked cookies degrade to nothing, never an error", () => {
   assert.deepEqual(readMetaAttributionCookies(`_fbp=${"x".repeat(2000)}`), {});
 });
 
+// --- Meta "Test events" code -------------------------------------------------
+
+test("validateMetaTestEventCode accepts only short alphanumerics", () => {
+  assert.equal(validateMetaTestEventCode("EAG84721"), "EAG84721");
+  assert.equal(validateMetaTestEventCode(null), null);
+  assert.equal(validateMetaTestEventCode(""), null);
+  assert.equal(validateMetaTestEventCode("ABC 123"), null);
+  assert.equal(validateMetaTestEventCode("abc-123"), null);
+  assert.equal(validateMetaTestEventCode("a".repeat(65)), null);
+});
+
+test("readMetaTestEventCode parses the URL query only", () => {
+  assert.equal(readMetaTestEventCode("?test_event_code=EAG84721&utm_source=x"), "EAG84721");
+  assert.equal(readMetaTestEventCode("?utm_source=x"), null);
+  assert.equal(readMetaTestEventCode(""), null);
+  assert.equal(readMetaTestEventCode("?test_event_code=bad/code"), null);
+});
+
+test("captureMetaTestEventCode stores a URL code and falls back to the session", () => {
+  const session = fakeSession();
+  // URL code wins and is persisted for later navigations.
+  assert.equal(captureMetaTestEventCode("?test_event_code=EAG84721", session), "EAG84721");
+  assert.equal(session.store.get("spud_meta_test_event_code"), "EAG84721");
+  // Later page load without the param: the session keeps the test session tagged.
+  assert.equal(captureMetaTestEventCode("", session), "EAG84721");
+  // Garbage in storage is rejected, never forwarded.
+  session.store.set("spud_meta_test_event_code", "not valid!");
+  assert.equal(captureMetaTestEventCode("", session), null);
+});
+
+test("withMetaTestEventCode adds or updates the param without touching the path", () => {
+  assert.equal(
+    withMetaTestEventCode("https://spudchallenge.online/offer/", "EAG84721"),
+    "https://spudchallenge.online/offer/?test_event_code=EAG84721",
+  );
+  assert.equal(
+    withMetaTestEventCode("https://spudchallenge.online/?test_event_code=OLD", "NEW1"),
+    "https://spudchallenge.online/?test_event_code=NEW1",
+  );
+});
+
+test("buildMetaRequestMetadata forwards the test code only with consent", () => {
+  const session = fakeSession();
+  const withCode = buildMetaRequestMetadata(
+    fakeStorage("allowed"),
+    session,
+    "?test_event_code=EAG84721",
+  );
+  assert.equal(withCode?.test_event_code, "EAG84721");
+
+  // Navigation lost the param; the session-stored code still tags submissions.
+  const afterNav = buildMetaRequestMetadata(fakeStorage("allowed"), session, "");
+  assert.equal(afterNav?.test_event_code, "EAG84721");
+
+  // No consent → nothing leaves the browser, test code included.
+  assert.equal(
+    buildMetaRequestMetadata(fakeStorage("declined"), fakeSession(), "?test_event_code=EAG84721"),
+    null,
+  );
+});
+
 // --- end-to-end submission simulation -----------------------------------------------
 // Mirrors the exact ordering in follow-section.tsx / offer-form.tsx: metadata
 // is built before the request, and the Pixel Lead fires ONLY after the
@@ -191,14 +270,16 @@ function simulateSubmission(opts: {
   conversionType: "follower" | "trade_offer";
   consent: "allowed" | "declined" | null;
   backendSucceeds: boolean;
+  search?: string;
 }) {
   const storage = fakeStorage(opts.consent ?? undefined);
+  const session = fakeSession();
   const { calls, ctx } = fakeFbq();
 
-  const meta = buildMetaRequestMetadata(storage);
+  const meta = buildMetaRequestMetadata(storage, session, opts.search ?? "");
   // Server-side counterpart: what the Edge Function would parse/forward.
   const serverMeasurement = meta
-    ? { event_id: meta.event_id, fbp: meta.fbp, fbc: meta.fbc }
+    ? { event_id: meta.event_id, fbp: meta.fbp, fbc: meta.fbc, test_event_code: meta.test_event_code }
     : null;
 
   let backendOk = false;
@@ -257,6 +338,17 @@ test("declined consent prevents all Meta measurement even on success", () => {
   });
   assert.equal(calls.length, 0);
   assert.equal(serverMeasurement, null, "no meta metadata leaves the browser");
+});
+
+test("an Events Manager test session tags the server measurement", () => {
+  const { calls, serverMeasurement } = simulateSubmission({
+    conversionType: "trade_offer",
+    consent: "allowed",
+    backendSucceeds: true,
+    search: "?test_event_code=EAG84721",
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(serverMeasurement?.test_event_code, "EAG84721");
 });
 
 // --- first-party analytics remain intact ----------------------------------------------

@@ -65,6 +65,21 @@ test("parseMetaMeasurement accepts event_id and optional fbp/fbc", () => {
   );
 });
 
+test("parseMetaMeasurement validates the Events Manager test_event_code", () => {
+  assert.deepEqual(
+    parseMetaMeasurement({ consented: true, event_id: "e1", test_event_code: " EAG84721 " }),
+    { event_id: "e1", test_event_code: "EAG84721" },
+  );
+  // Invalid codes are dropped, never fatal to the submission.
+  for (const bad of ["bad/code", "has space", "x".repeat(65), 123, ["EAG84721"]]) {
+    assert.deepEqual(
+      parseMetaMeasurement({ consented: true, event_id: "e1", test_event_code: bad }),
+      { event_id: "e1" },
+      `code ${JSON.stringify(bad)} must be dropped`,
+    );
+  }
+});
+
 test("missing or oversized fbp/fbc never breaks a submission", () => {
   // Absent entirely.
   assert.deepEqual(parseMetaMeasurement({ consented: true, event_id: "e1" }), {
@@ -238,6 +253,33 @@ test("sendMetaLead throws on rejection without leaking the token", async () => {
   );
 });
 
+test("sendMetaLead carries test_event_code top-level only, and only when valid", async () => {
+  const config = { accessToken: "tok", datasetId: "123" };
+  const captured: { init?: RequestInit } = {};
+
+  await sendMetaLead(config, { ...FULL_INPUT, testEventCode: "EAG84721" }, okFetch(captured), {
+    nowSeconds: () => 1,
+  });
+  let body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
+  assert.equal(body.test_event_code, "EAG84721");
+  // The tag lives at the top level of the request, never inside the event.
+  const event = (body.data as Array<Record<string, unknown>>)[0];
+  assert.ok(!("test_event_code" in event));
+  assert.deepEqual(event.custom_data, { conversion_type: "follower" });
+
+  // No code → no tag in the body at all.
+  await sendMetaLead(config, FULL_INPUT, okFetch(captured), { nowSeconds: () => 1 });
+  body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
+  assert.ok(!("test_event_code" in body));
+
+  // Malformed codes are never forwarded.
+  await sendMetaLead(config, { ...FULL_INPUT, testEventCode: "bad/code" }, okFetch(captured), {
+    nowSeconds: () => 1,
+  });
+  body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
+  assert.ok(!("test_event_code" in body));
+});
+
 test("recordMetaLeadBestEffort never throws and logs sanitized errors", async () => {
   const env = (key: string) =>
     key === "META_CAPI_ACCESS_TOKEN" ? "secret-token" : key === "META_DATASET_ID" ? "123" : undefined;
@@ -285,4 +327,23 @@ test("recordMetaLeadBestEffort reuses the browser event_id for dedup", async () 
   };
   assert.equal(body.data[0].event_id, "shared-event-id");
   assert.deepEqual(body.data[0].custom_data, { conversion_type: "trade_offer" });
+});
+
+test("recordMetaLeadBestEffort forwards the test session tag for CAPI events", async () => {
+  const captured: { init?: RequestInit } = {};
+  const env = (key: string) =>
+    key === "META_CAPI_ACCESS_TOKEN" ? "tok" : key === "META_DATASET_ID" ? "123" : undefined;
+  await recordMetaLeadBestEffort(
+    env,
+    { event_id: "shared-event-id", test_event_code: "EAG84721" },
+    {
+      conversionType: "follower",
+      eventSourceUrl: "https://spudchallenge.online/",
+      clientIpAddress: null,
+      clientUserAgent: null,
+    },
+    okFetch(captured),
+  );
+  const body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
+  assert.equal(body.test_event_code, "EAG84721");
 });

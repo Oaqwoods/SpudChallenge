@@ -1434,6 +1434,8 @@ Prompt 40. Meta is an **additional**, consent-gated measurement system. It never
 
 CAPI payload (per Lead): `event_name: "Lead"`, `event_time` (server Unix seconds), `event_id`, `event_source_url` (canonical page for the conversion: site root for follower, `/offer/` for offers), `action_source: "website"`, `custom_data: { conversion_type }`, and `user_data` limited to `client_ip_address`, `client_user_agent`, `fbp`, `fbc` — all sent **unhashed**; no email, phone, names, DOB, gender, address, ZIP, offer text, item descriptions, photo metadata, or any private/admin data is ever transmitted.
 
+Meta Events Manager **test-event passthrough**: when a test session opens the site with `?test_event_code=…`, the code is captured into `sessionStorage`, restored into the URL after internal navigations (the Pixel tags browser events purely from that URL parameter), and forwarded with the consent-gated `meta` metadata so the CAPI request body carries the same `test_event_code` top-level. Test-tagged events appear in Meta's Test events tool and are excluded from production statistics. Codes are strictly validated (`[A-Za-z0-9]{1,64}`) on both sides; an invalid code is dropped, never fatal.
+
 ### 39.5 Failure isolation
 
 Meta delivery is strictly best-effort. The CAPI call is awaited with a short timeout inside the handler but is fully caught: a Meta timeout, rejection, outage, or misconfiguration never fails a signup/offer, never retries by creating duplicate application records, and produces at most a sanitized server-side error log. Pixel failures are silently ignored on the client.

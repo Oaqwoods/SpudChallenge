@@ -244,6 +244,12 @@ Supabase Edge Function secrets (Graph API version pinned to v25.0 in
 a Meta failure can never fail a signup or an offer. See
 [SECURITY.md](SECURITY.md) and the privacy page for details.
 
+For Meta Events Manager **Test events**: open the site via the tool so the
+URL carries `?test_event_code=…`. The code survives internal navigations
+(session capture + URL restore) and is forwarded server-side, so both the
+browser Pixel events and the CAPI Leads show up tagged in the test tool
+and stay out of production statistics.
+
 ## Project structure
 
 ```

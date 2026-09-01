@@ -14,11 +14,21 @@ export const META_CONSENT_CHANGED_EVENT = "spud-meta-consent-changed";
 export const META_CONSENT_REOPEN_EVENT = "spud-meta-consent-reopen";
 const META_PIXEL_SCRIPT_ID = "meta-pixel";
 
+// Meta Events Manager "Test events" support. The tool opens the site with
+// ?test_event_code=…; the Pixel tags browser events purely from that URL
+// parameter (fbevents.js has no per-call option — verified against the
+// shipped script), so the code must survive internal navigations. It is
+// captured into sessionStorage and restored into the URL on page load, and
+// also forwarded to the Edge Functions so CAPI Leads carry the same tag.
+export const META_TEST_CODE_PARAM = "test_event_code";
+const META_TEST_CODE_SESSION_KEY = "spud_meta_test_event_code";
+
 export interface MetaRequestMetadata {
   consented: true;
   event_id: string;
   fbp?: string;
   fbc?: string;
+  test_event_code?: string;
 }
 
 // NEXT_PUBLIC_* values are inlined at build time; empty string when the
@@ -112,18 +122,69 @@ export function readMetaAttributionCookies(
   return out;
 }
 
+// --- Meta "Test events" code (Events Manager test sessions) ---------------
+
+// Meta test-event codes are short alphanumerics; anything else is dropped.
+export function validateMetaTestEventCode(raw: string | null): string | null {
+  if (!raw || !/^[A-Za-z0-9]{1,64}$/.test(raw)) return null;
+  return raw;
+}
+
+export function readMetaTestEventCode(search: string): string | null {
+  if (!search) return null;
+  try {
+    return validateMetaTestEventCode(new URLSearchParams(search).get(META_TEST_CODE_PARAM));
+  } catch {
+    return null;
+  }
+}
+
+// URL wins; otherwise fall back to the code captured earlier this session.
+// Stores a URL-provided code so it survives internal navigations.
+export function captureMetaTestEventCode(
+  search: string = typeof window === "undefined" ? "" : window.location.search,
+  session: Pick<Storage, "getItem" | "setItem"> = window.sessionStorage,
+): string | null {
+  const fromUrl = readMetaTestEventCode(search);
+  if (fromUrl) {
+    try {
+      session.setItem(META_TEST_CODE_SESSION_KEY, fromUrl);
+    } catch {
+      // Session storage blocked: the code still works for this page.
+    }
+    return fromUrl;
+  }
+  try {
+    return validateMetaTestEventCode(session.getItem(META_TEST_CODE_SESSION_KEY));
+  } catch {
+    return null;
+  }
+}
+
+// Pure helper: returns href with the test code (re)added as a query param.
+export function withMetaTestEventCode(href: string, code: string): string {
+  const url = new URL(href);
+  url.searchParams.set(META_TEST_CODE_PARAM, code);
+  return url.toString();
+}
+
 // The optional `meta` object attached to follower/offer submissions. Built
 // ONLY when the visitor allowed Meta measurement; otherwise null — nothing
 // Meta-related leaves the browser without consent.
 export function buildMetaRequestMetadata(
   storage: Pick<Storage, "getItem"> = window.localStorage,
+  session: Pick<Storage, "getItem" | "setItem"> = window.sessionStorage,
+  search: string = typeof window === "undefined" ? "" : window.location.search,
 ): MetaRequestMetadata | null {
   if (!metaMeasurementAllowed(storage)) return null;
-  return {
+  const metadata: MetaRequestMetadata = {
     consented: true,
     event_id: newMetaEventId(),
     ...readMetaAttributionCookies(),
   };
+  const testEventCode = captureMetaTestEventCode(search, session);
+  if (testEventCode) metadata.test_event_code = testEventCode;
+  return metadata;
 }
 
 // --- Pixel loading + events ----------------------------------------------
