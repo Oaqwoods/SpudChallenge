@@ -11,6 +11,7 @@ import {
   metaEventsUrl,
   parseMetaMeasurement,
   recordMetaLeadBestEffort,
+  sanitizedMetaErrorDetail,
   sendMetaLead,
   type MetaLeadInput,
 } from "../supabase/functions/_shared/meta-capi.ts";
@@ -253,6 +254,64 @@ test("sendMetaLead throws on rejection without leaking the token", async () => {
   );
 });
 
+// --- sanitized rejection detail --------------------------------------------
+
+test("sanitizedMetaErrorDetail keeps only message, type and code", () => {
+  assert.equal(
+    sanitizedMetaErrorDetail({
+      error: {
+        message: "Invalid OAuth access token.",
+        type: "OAuthException",
+        code: 190,
+        fbtrace_id: "A1b2C3",
+        error_data: { blank: true },
+      },
+    }),
+    "Invalid OAuth access token. | OAuthException | code 190",
+  );
+  assert.equal(
+    sanitizedMetaErrorDetail({
+      error: { message: "Unsupported post request. Object with ID '123' does not exist." },
+    }),
+    "Unsupported post request. Object with ID '123' does not exist.",
+  );
+  // No error object / unusable payloads contribute nothing.
+  assert.equal(sanitizedMetaErrorDetail(null), "");
+  assert.equal(sanitizedMetaErrorDetail("oops"), "");
+  assert.equal(sanitizedMetaErrorDetail({ error: "not-an-object" }), "");
+  assert.equal(sanitizedMetaErrorDetail({ error: {} }), "");
+  // Long messages are capped.
+  const capped = sanitizedMetaErrorDetail({ error: { message: "x".repeat(1000) } });
+  assert.equal(capped.length, 300);
+});
+
+test("sendMetaLead surfaces Meta's sanitized rejection reason", async () => {
+  const config = { accessToken: "secret-token", datasetId: "123" };
+  const metaError = JSON.stringify({
+    error: {
+      message: "Invalid parameter: test_event_code",
+      type: "GraphMethodException",
+      code: 100,
+      fbtrace_id: "A1b2C3",
+    },
+  });
+  await assert.rejects(
+    sendMetaLead(config, FULL_INPUT, (async () =>
+      new Response(metaError, { status: 400 })) as typeof fetch),
+    (err: Error) => {
+      assert.match(err.message, /HTTP 400/);
+      assert.match(err.message, /Invalid parameter: test_event_code/);
+      assert.match(err.message, /GraphMethodException \| code 100/);
+      // Only the approved fields travel — never the raw body's other keys,
+      // the token, or any request payload content.
+      assert.ok(!err.message.includes("A1b2C3"));
+      assert.ok(!err.message.includes("secret-token"));
+      assert.ok(!err.message.includes("spudchallenge"));
+      return true;
+    },
+  );
+});
+
 test("sendMetaLead carries test_event_code top-level only, and only when valid", async () => {
   const config = { accessToken: "tok", datasetId: "123" };
   const captured: { init?: RequestInit } = {};
@@ -291,8 +350,11 @@ test("recordMetaLeadBestEffort never throws and logs sanitized errors", async ()
     clientUserAgent: null,
   };
 
-  // No consent metadata → no call at all.
-  await recordMetaLeadBestEffort(env, null, input, okFetch({}), (m) => logs.push(m));
+  // No consent metadata → no call and no log line at all.
+  await recordMetaLeadBestEffort(env, null, input, okFetch({}), {
+    logError: (m) => logs.push(m),
+  });
+  assert.equal(logs.length, 0);
 
   // Meta outage → swallowed, sanitized log, no token/body in the log.
   await recordMetaLeadBestEffort(
@@ -300,11 +362,65 @@ test("recordMetaLeadBestEffort never throws and logs sanitized errors", async ()
     { event_id: "e1" },
     input,
     (async () => new Response("nope", { status: 500 })) as typeof fetch,
-    (m) => logs.push(m),
+    { logError: (m) => logs.push(m) },
   );
   assert.equal(logs.length, 1);
   assert.match(logs[0], /^meta-capi failed: /);
   assert.ok(!logs[0].includes("secret-token"));
+});
+
+test("recordMetaLeadBestEffort makes a missing CAPI config visible", async () => {
+  const logs: string[] = [];
+  let called = false;
+  await recordMetaLeadBestEffort(
+    () => undefined,
+    { event_id: "e1", test_event_code: "EAG84721" },
+    {
+      conversionType: "follower",
+      eventSourceUrl: "https://spudchallenge.online/",
+      clientIpAddress: null,
+      clientUserAgent: null,
+    },
+    (async () => {
+      called = true;
+      return new Response("", { status: 200 });
+    }) as typeof fetch,
+    { logError: (m) => logs.push(m) },
+  );
+  assert.equal(called, false, "no config must never reach the Graph API");
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /^meta-capi skipped: /);
+  assert.match(logs[0], /META_CAPI_ACCESS_TOKEN\/META_DATASET_ID not configured/);
+});
+
+test("recordMetaLeadBestEffort logs the delivery outcome", async () => {
+  const env = (key: string) =>
+    key === "META_CAPI_ACCESS_TOKEN" ? "tok" : key === "META_DATASET_ID" ? "123" : undefined;
+  const input = {
+    conversionType: "follower" as const,
+    eventSourceUrl: "https://spudchallenge.online/",
+    clientIpAddress: null,
+    clientUserAgent: null,
+  };
+
+  // Accepted → events_received is visible in the log.
+  const info: string[] = [];
+  await recordMetaLeadBestEffort(env, { event_id: "e1" }, input, okFetch({}), {
+    log: (m) => info.push(m),
+  });
+  assert.deepEqual(info, ["meta-capi Lead accepted (events_received=1)"]);
+
+  // Accepted but zero events received → warning on the error channel.
+  const errors: string[] = [];
+  await recordMetaLeadBestEffort(
+    env,
+    { event_id: "e1" },
+    input,
+    (async () =>
+      new Response(JSON.stringify({ events_received: 0 }), { status: 200 })) as typeof fetch,
+    { logError: (m) => errors.push(m) },
+  );
+  assert.deepEqual(errors, ["meta-capi Lead accepted but events_received=0"]);
 });
 
 test("recordMetaLeadBestEffort reuses the browser event_id for dedup", async () => {

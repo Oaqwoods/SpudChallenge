@@ -298,7 +298,10 @@ Deno.serve(async (req) => {
         clientUserAgent: req.headers.get("user-agent"),
       },
       fetch,
-      (message) => console.error("submit-offer " + message),
+      {
+        log: (message) => console.log("submit-offer " + message),
+        logError: (message) => console.error("submit-offer " + message),
+      },
     );
 
     // `prelaunch` tells the form which confirmation copy to show; the offer

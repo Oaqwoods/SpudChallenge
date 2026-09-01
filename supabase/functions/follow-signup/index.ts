@@ -187,7 +187,10 @@ Deno.serve(async (req) => {
         clientUserAgent: req.headers.get("user-agent"),
       },
       fetch,
-      (message) => console.error("follow-signup " + message),
+      {
+        log: (message) => console.log("follow-signup " + message),
+        logError: (message) => console.error("follow-signup " + message),
+      },
     );
 
     return json(

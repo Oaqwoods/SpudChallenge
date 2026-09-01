@@ -131,6 +131,31 @@ export interface MetaLeadResult {
   eventsReceived: number;
 }
 
+const MAX_META_ERROR_DETAIL_LENGTH = 300;
+
+// Meta's error body ({error: {message, type, code}}) explains a rejection —
+// "Invalid OAuth access token", "Object with ID ... does not exist", invalid
+// parameter names — and is the only signal for why a Lead never reached
+// Events Manager. Only those three fields are kept (never the raw body),
+// so neither the token nor submission content can enter a log line.
+export function sanitizedMetaErrorDetail(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+  const error = (payload as { error?: unknown }).error;
+  if (!error || typeof error !== "object") return "";
+  const record = error as Record<string, unknown>;
+  const parts: string[] = [];
+  if (typeof record.message === "string" && record.message.trim()) {
+    parts.push(record.message.trim());
+  }
+  if (typeof record.type === "string" && record.type.trim()) {
+    parts.push(record.type.trim());
+  }
+  if (typeof record.code === "number" || typeof record.code === "string") {
+    parts.push(`code ${record.code}`);
+  }
+  return parts.join(" | ").slice(0, MAX_META_ERROR_DETAIL_LENGTH);
+}
+
 // Sends one Lead through CAPI. Returns null when CAPI is not configured
 // (silent skip). Throws on transport/HTTP errors so callers can log a
 // sanitized error; callers must always catch — Meta failures never fail a
@@ -164,7 +189,11 @@ export async function sendMetaLead(
     signal: AbortSignal.timeout(options.timeoutMs ?? META_CAPI_TIMEOUT_MS),
   });
   if (!res.ok) {
-    throw new Error(`Meta CAPI rejected the Lead (HTTP ${res.status}).`);
+    const payload = (await res.json().catch(() => null)) as unknown;
+    const detail = sanitizedMetaErrorDetail(payload);
+    throw new Error(
+      `Meta CAPI rejected the Lead (HTTP ${res.status}${detail ? `: ${detail}` : ""}).`,
+    );
   }
   const parsed = (await res.json().catch(() => null)) as {
     events_received?: number;
@@ -172,22 +201,36 @@ export async function sendMetaLead(
   return { eventsReceived: Number(parsed?.events_received ?? 0) };
 }
 
+export interface MetaCapiLoggers {
+  log?: (message: string) => void;
+  logError?: (message: string) => void;
+}
+
 // Fire-and-log wrapper for Edge Function handlers: sends the Lead when
 // measurement metadata and CAPI config are present, and converts every
-// failure into a sanitized log line. Never throws, never returns detail
-// that could leak the access token or submission contents.
+// outcome into a sanitized log line so delivery is observable in the Edge
+// Function logs — a consented conversion that never reaches Meta must be
+// distinguishable from one Meta rejected (and why). Never throws, never
+// returns detail that could leak the access token or submission contents.
 export async function recordMetaLeadBestEffort(
   env: (key: string) => string | undefined,
   measurement: MetaMeasurement | null,
   input: Omit<MetaLeadInput, "eventId" | "fbp" | "fbc" | "testEventCode">,
   fetchImpl: typeof fetch,
-  logError: (message: string) => void = (message) => console.error(message),
+  loggers: MetaCapiLoggers = {},
 ): Promise<void> {
+  const log = loggers.log ?? ((message) => console.log(message));
+  const logError = loggers.logError ?? ((message) => console.error(message));
   if (!measurement) return;
   const config = metaCapiConfig(env);
-  if (!config) return;
+  if (!config) {
+    // Consented conversion with no CAPI secrets: a silent skip here means
+    // the Lead never leaves the function, so this must be visible.
+    logError("meta-capi skipped: META_CAPI_ACCESS_TOKEN/META_DATASET_ID not configured");
+    return;
+  }
   try {
-    await sendMetaLead(
+    const result = await sendMetaLead(
       config,
       {
         ...input,
@@ -198,6 +241,12 @@ export async function recordMetaLeadBestEffort(
       },
       fetchImpl,
     );
+    if (!result) return;
+    if (result.eventsReceived > 0) {
+      log(`meta-capi Lead accepted (events_received=${result.eventsReceived})`);
+    } else {
+      logError("meta-capi Lead accepted but events_received=0");
+    }
   } catch (err) {
     logError(`meta-capi failed: ${errorMessage(err)}`);
   }
