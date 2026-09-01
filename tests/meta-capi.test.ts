@@ -403,12 +403,14 @@ test("recordMetaLeadBestEffort logs the delivery outcome", async () => {
     clientUserAgent: null,
   };
 
-  // Accepted → events_received is visible in the log.
+  // Accepted → events_received + dedup context are visible in the log.
   const info: string[] = [];
   await recordMetaLeadBestEffort(env, { event_id: "e1" }, input, okFetch({}), {
     log: (m) => info.push(m),
   });
-  assert.deepEqual(info, ["meta-capi Lead accepted (events_received=1)"]);
+  assert.deepEqual(info, [
+    "meta-capi Lead accepted (events_received=1, event_id=e1, test_event_code=absent)",
+  ]);
 
   // Accepted but zero events received → warning on the error channel.
   const errors: string[] = [];
@@ -420,7 +422,52 @@ test("recordMetaLeadBestEffort logs the delivery outcome", async () => {
       new Response(JSON.stringify({ events_received: 0 }), { status: 200 })) as typeof fetch,
     { logError: (m) => errors.push(m) },
   );
-  assert.deepEqual(errors, ["meta-capi Lead accepted but events_received=0"]);
+  assert.deepEqual(errors, [
+    "meta-capi Lead accepted but events_received=0 (event_id=e1, test_event_code=absent)",
+  ]);
+});
+
+// End-to-end for the Events Manager test flow: the exact meta object the
+// browser builds (steps 3–4) parses (steps 5–6) and lands as the TOP-LEVEL
+// test_event_code in the CAPI POST body (steps 7–8), and the delivery log
+// names the code so the tagging path is auditable in Edge Function logs.
+test("TEST52520 rides end-to-end into the top-level CAPI body field", async () => {
+  const env = (key: string) =>
+    key === "META_CAPI_ACCESS_TOKEN" ? "tok" : key === "META_DATASET_ID" ? "123" : undefined;
+  const captured: { init?: RequestInit } = {};
+  const info: string[] = [];
+
+  const browserMeta = {
+    consented: true,
+    event_id: "shared-event-id",
+    fbp: "fb.1.1700000000000.abcdef",
+    test_event_code: "TEST52520",
+  };
+  await recordMetaLeadBestEffort(
+    env,
+    parseMetaMeasurement(browserMeta),
+    {
+      conversionType: "follower",
+      eventSourceUrl: "https://spudchallenge.online/",
+      clientIpAddress: null,
+      clientUserAgent: null,
+    },
+    okFetch(captured),
+    { log: (m) => info.push(m) },
+  );
+
+  const body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
+  assert.equal(body.test_event_code, "TEST52520");
+  const event = (body.data as Array<Record<string, unknown>>)[0];
+  assert.ok(!("test_event_code" in event), "the tag must stay top-level, not in the event");
+  assert.equal(event.event_id, "shared-event-id");
+
+  assert.deepEqual(info, [
+    "meta-capi Lead accepted (events_received=1, event_id=shared-event-id, test_event_code=TEST52520)",
+  ]);
+  // The log line carries only the approved context — never fbp/fbc.
+  assert.ok(!info[0].includes("fb.1.1700000000000.abcdef"));
+  assert.ok(!info[0].includes("tok"));
 });
 
 test("recordMetaLeadBestEffort reuses the browser event_id for dedup", async () => {

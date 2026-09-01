@@ -206,6 +206,17 @@ export interface MetaCapiLoggers {
   logError?: (message: string) => void;
 }
 
+// Sanitized context appended to every meta-capi log line. Only values that
+// are safe and diagnostic: the dedup event_id (a random UUID) and the
+// Events Manager test code (a short-lived, non-secret test tag). Deliberately
+// NOT logged: fbp/fbc, IP, user agent, or any submission content.
+function measurementContext(measurement: MetaMeasurement): string {
+  const testCode = measurement.test_event_code
+    ? `test_event_code=${measurement.test_event_code}`
+    : "test_event_code=absent";
+  return `event_id=${measurement.event_id}, ${testCode}`;
+}
+
 // Fire-and-log wrapper for Edge Function handlers: sends the Lead when
 // measurement metadata and CAPI config are present, and converts every
 // outcome into a sanitized log line so delivery is observable in the Edge
@@ -222,11 +233,14 @@ export async function recordMetaLeadBestEffort(
   const log = loggers.log ?? ((message) => console.log(message));
   const logError = loggers.logError ?? ((message) => console.error(message));
   if (!measurement) return;
+  const context = measurementContext(measurement);
   const config = metaCapiConfig(env);
   if (!config) {
     // Consented conversion with no CAPI secrets: a silent skip here means
     // the Lead never leaves the function, so this must be visible.
-    logError("meta-capi skipped: META_CAPI_ACCESS_TOKEN/META_DATASET_ID not configured");
+    logError(
+      `meta-capi skipped: META_CAPI_ACCESS_TOKEN/META_DATASET_ID not configured (${context})`,
+    );
     return;
   }
   try {
@@ -243,11 +257,11 @@ export async function recordMetaLeadBestEffort(
     );
     if (!result) return;
     if (result.eventsReceived > 0) {
-      log(`meta-capi Lead accepted (events_received=${result.eventsReceived})`);
+      log(`meta-capi Lead accepted (events_received=${result.eventsReceived}, ${context})`);
     } else {
-      logError("meta-capi Lead accepted but events_received=0");
+      logError(`meta-capi Lead accepted but events_received=0 (${context})`);
     }
   } catch (err) {
-    logError(`meta-capi failed: ${errorMessage(err)}`);
+    logError(`meta-capi failed: ${errorMessage(err)} (${context})`);
   }
 }

@@ -261,6 +261,22 @@ test("buildMetaRequestMetadata forwards the test code only with consent", () => 
   );
 });
 
+test("the TEST52520 test URL reaches the request metadata and survives navigation", () => {
+  const session = fakeSession();
+  // Step 1–3: the URL Meta Test Events opens → sessionStorage capture →
+  // consented request metadata.
+  const meta = buildMetaRequestMetadata(
+    fakeStorage("allowed"),
+    session,
+    "?test_event_code=TEST52520",
+  );
+  assert.equal(meta?.test_event_code, "TEST52520");
+  // Step 2 backstop: with the param gone, the session-stored code still
+  // tags the submission (step 4).
+  const afterNav = buildMetaRequestMetadata(fakeStorage("allowed"), session, "");
+  assert.equal(afterNav?.test_event_code, "TEST52520");
+});
+
 // --- end-to-end submission simulation -----------------------------------------------
 // Mirrors the exact ordering in follow-section.tsx / offer-form.tsx: metadata
 // is built before the request, and the Pixel Lead fires ONLY after the
