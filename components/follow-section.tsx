@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useChallenge } from "@/components/challenge-provider";
 import { track } from "@/lib/analytics";
-import { buildMetaRequestMetadata, fireMetaLead } from "@/lib/meta";
+import { buildMetaRequestMetadata, fireMetaConversion } from "@/lib/meta";
 import { callEdgeFunction } from "@/lib/supabase";
 import { readUtm } from "@/lib/utm";
 import { Panel, SectionHeading } from "@/components/ui";
@@ -89,8 +89,9 @@ function FollowForm() {
     setStatus("submitting");
     try {
       // Optional, consent-gated Meta measurement metadata (prompt 40). The
-      // same event_id is reused by the browser Pixel Lead AFTER the backend
-      // confirms success, so Meta can deduplicate Pixel + Conversions API.
+      // same event_id is reused by the browser Pixel CompleteRegistration
+      // AFTER the backend confirms success, so Meta can deduplicate Pixel +
+      // Conversions API.
       const meta = buildMetaRequestMetadata();
       const res = await callEdgeFunction<SignupResponse>("follow-signup", {
         email: normalizedEmail,
@@ -106,7 +107,7 @@ function FollowForm() {
       setStatus("success");
       setEmailSent(res.email_sent);
       track("follower_submitted");
-      if (meta) fireMetaLead("follower", meta.event_id);
+      if (meta) fireMetaConversion("follower", meta.event_id);
       if (res.trade_interest) track("potential_trader_captured");
       if (res.email_updates_opt_in && res.trade_interest) {
         setMessage(

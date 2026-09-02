@@ -2,11 +2,23 @@
 // Consent-gated, best-effort, PII-free browser measurement — an ADDITIONAL
 // system next to the first-party analytics in lib/analytics.ts, never a
 // replacement. No Automatic Advanced Matching, no form-field scraping: the
-// only things ever sent to Meta are the Pixel script's own PageView/Lead
-// signals, a conversion_type tag and a shared deduplication event_id.
+// only things ever sent to Meta are the Pixel script's own PageView signal,
+// the mapped standard conversion event and a shared deduplication event_id.
 
 export type MetaConsentChoice = "allowed" | "declined";
 export type MetaConversionType = "follower" | "trade_offer";
+
+// Final standard-event mapping after Meta Events Manager Core Setup /
+// data-sharing restrictions (2026-09-02). Conversion identity travels in the
+// STANDARD EVENT NAME itself — never in URL paths or custom parameters,
+// because Core Setup may strip custom parameters such as the old
+// conversion_type tag.
+export type MetaStandardEvent = "CompleteRegistration" | "Lead";
+
+export const META_STANDARD_EVENTS: Readonly<Record<MetaConversionType, MetaStandardEvent>> = {
+  follower: "CompleteRegistration",
+  trade_offer: "Lead",
+};
 
 export const META_CONSENT_STORAGE_KEY = "spud_meta_consent";
 // Window events used to keep the banner/loader in sync without reloads.
@@ -234,32 +246,36 @@ export function trackMetaPageView(ctx: Pick<Window, "fbq"> = window): void {
   }
 }
 
-// Fire the browser Lead. Callers are responsible for firing this ONLY after
-// the backend confirmed success and with the same event_id the server used
-// for its Conversions API Lead (Meta deduplicates on event_id).
-export function trackMetaLead(
+// Fire the browser conversion event (CompleteRegistration for follower
+// signups, Lead for trade offers — META_STANDARD_EVENTS). No custom
+// parameters: Core Setup may strip them, so the standard event name alone
+// carries the conversion identity. Callers are responsible for firing this
+// ONLY after the backend confirmed success and with the same event_id the
+// server used for its Conversions API event (Meta deduplicates on event_id).
+export function trackMetaConversion(
   conversionType: MetaConversionType,
   eventId: string,
   ctx: Pick<Window, "fbq"> = window,
 ): void {
-  if (conversionType !== "follower" && conversionType !== "trade_offer") return;
+  const eventName = META_STANDARD_EVENTS[conversionType];
+  if (!eventName) return;
   if (!eventId) return;
   try {
-    ctx.fbq?.("track", "Lead", { conversion_type: conversionType }, { eventID: eventId });
+    ctx.fbq?.("track", eventName, {}, { eventID: eventId });
   } catch {
     // Measurement is best-effort.
   }
 }
 
-// Consent-checked wrapper used by the forms: fires the browser Lead only
-// when Meta measurement is allowed (the Pixel only loads under the same
-// condition, but the consent could change mid-session).
-export function fireMetaLead(
+// Consent-checked wrapper used by the forms: fires the browser conversion
+// event only when Meta measurement is allowed (the Pixel only loads under
+// the same condition, but the consent could change mid-session).
+export function fireMetaConversion(
   conversionType: MetaConversionType,
   eventId: string,
   storage: Pick<Storage, "getItem"> = window.localStorage,
   ctx: Pick<Window, "fbq"> = window,
 ): void {
   if (!metaMeasurementAllowed(storage)) return;
-  trackMetaLead(conversionType, eventId, ctx);
+  trackMetaConversion(conversionType, eventId, ctx);
 }

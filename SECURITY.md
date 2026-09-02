@@ -164,12 +164,15 @@ prompt-29 valuation/verification-documents follow-ups 2026-08-25.
   The Meta Pixel loads only after an explicit Allow (stored in the visitor's
   own browser; off by default and off after Decline), and the Conversions API
   fires only when the submission itself carries that consent attestation. The
-  only data sent to Meta is a `Lead` event tagged `follower`/`trade_offer`,
-  the page URL, a deduplicated event ID, client IP/user-agent and Meta's own
-  `_fbp`/`_fbc` cookies (unhashed) — never emails, phone numbers, names,
-  offer text, item descriptions, photos or files. Meta delivery is
-  best-effort with a timeout: a Meta failure can never fail a signup or an
-  offer, and errors are logged sanitized via `errorMessage()`.
+  only data sent to Meta is a standard conversion event — `CompleteRegistration`
+  for a follower signup, `Lead` for a trade offer — plus the page URL, a
+  deduplicated event ID, client IP/user-agent and Meta's own `_fbp`/`_fbc`
+  cookies (unhashed). Conversion identity is the standard event name itself:
+  no `conversion_type` custom parameter and no reliance on URL paths (Events
+  Manager Core Setup may strip custom parameters). Never emails, phone
+  numbers, names, offer text, item descriptions, photos or files. Meta
+  delivery is best-effort with a timeout: a Meta failure can never fail a
+  signup or an offer, and errors are logged sanitized via `errorMessage()`.
 
 ## Known limitations
 

@@ -173,8 +173,9 @@ secrets to disable again.
 ### Optional (Meta Test events tagging; temporary, pre-launch only)
 
 While verifying the Meta integration before launch, `META_TEST_EVENT_CODE`
-tags every server-side CAPI Lead from `follow-signup`/`submit-offer` with an
-Events Manager test code — even when the browser request carries none:
+tags every server-side CAPI conversion event from `follow-signup`
+(`CompleteRegistration`) and `submit-offer` (`Lead`) with an Events Manager
+test code — even when the browser request carries none:
 
 ```bash
 supabase secrets set META_TEST_EVENT_CODE=<code from Events Manager → Test events>
@@ -182,7 +183,8 @@ supabase secrets set META_TEST_EVENT_CODE=<code from Events Manager → Test eve
 
 A valid code attested by the browser always wins. The variable is temporary
 and never required in production: with no valid code from either source the
-Lead goes out as a normal production event. Remove it once testing is done:
+conversion event goes out as a normal production event. Remove it once
+testing is done:
 
 ```bash
 supabase secrets unset META_TEST_EVENT_CODE

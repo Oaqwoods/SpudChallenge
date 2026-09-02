@@ -6,7 +6,7 @@ import { captchaConfig, fetchCaptchaVerification, verifyCaptchaToken } from "../
 import { corsHeaders, isOriginAllowed } from "../_shared/cors.ts";
 import { isValidEmail, normalizeEmail, sanitizeText } from "../_shared/email.ts";
 import { errorMessage } from "../_shared/logging.ts";
-import { parseMetaMeasurement, recordMetaLeadBestEffort } from "../_shared/meta-capi.ts";
+import { parseMetaMeasurement, recordMetaConversionBestEffort } from "../_shared/meta-capi.ts";
 import { checkRateLimit, clientIp } from "../_shared/rate-limit.ts";
 import { buildConfirmation, resendConfigured, sendEmail, siteUrl } from "../_shared/resend.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
@@ -173,11 +173,12 @@ Deno.serve(async (req) => {
       emailSent = await sendEmail({ to: email, subject, html });
     }
 
-    // Best-effort Meta Conversions API Lead (prompt 40 / spec §39): only
-    // after the database write succeeded, only with browser-attested
-    // consent, and any Meta failure is swallowed so the signup is unaffected.
+    // Best-effort Meta Conversions API CompleteRegistration (prompt 40 /
+    // spec §39): only after the database write succeeded, only with
+    // browser-attested consent, and any Meta failure is swallowed so the
+    // signup is unaffected.
     const signupIp = clientIp(req);
-    await recordMetaLeadBestEffort(
+    await recordMetaConversionBestEffort(
       (key) => Deno.env.get(key),
       parseMetaMeasurement(record.meta),
       {

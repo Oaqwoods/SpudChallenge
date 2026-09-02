@@ -338,3 +338,50 @@ Other prompt-37 checks:
 | --- | --- |
 | `npx tsc --noEmit` | clean |
 | `npm run build` (static export) | clean |
+
+---
+
+## Addendum — PROMPT 40 final Meta standard-event mapping (2026-09-02)
+
+Meta Events Manager applied Core Setup / data-sharing restrictions to the
+Spud Challenge dataset, and the custom parameter `conversion_type` is not
+available in Custom Conversions. The Meta mapping was therefore changed so
+that **conversion identity travels in the standard event name itself** — not
+in a custom parameter and not in a URL path.
+
+| Conversion | Browser Pixel event | Server/CAPI event |
+| --- | --- | --- |
+| Follower signup | `CompleteRegistration` | `CompleteRegistration` |
+| Trade offer | `Lead` | `Lead` |
+
+The single source of truth is `META_STANDARD_EVENTS` (mirrored in
+`lib/meta.ts` and `supabase/functions/_shared/meta-capi.ts`).
+
+Verified invariants (unchanged by this mapping change):
+
+- **Consent gating:** Meta loads/fires only after an explicit Allow; a
+  Decline or no choice sends nothing, browser or server (test-locked).
+- **Dedup:** the browser event and the CAPI event for one conversion share a
+  single `event_id` (test-locked for both `CompleteRegistration` and `Lead`).
+- **CAPI retained:** `follow-signup` sends `CompleteRegistration`,
+  `submit-offer` sends `Lead`, best-effort after the DB write succeeds.
+- **Approved fields only:** `fbp`/`fbc`, client IP, user agent, event ID and
+  page URL. No email/phone/names/offer text/photos (key- and value-scanned).
+- **No `conversion_type`:** removed from the Pixel call and the CAPI payload;
+  no `custom_data` is transmitted at all (test-locked).
+- **Forms unchanged:** signup/offer production behavior, ordering
+  (backend success → first-party `track()` → consent-gated Meta event) and
+  prelaunch offer behavior are untouched.
+
+### Verification runs (2026-09-02)
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | clean |
+| `npm run lint` | clean |
+| `npm test` | 226 pass / 0 fail |
+| `npm run build` (static export) | clean, 21/21 static pages |
+| `node --test tests/meta-secrets.test.ts` (fresh `out/`) | no secret leakage |
+
+**Redeployment required:** the `follow-signup` and `submit-offer` Edge
+Functions (both bundle `_shared/meta-capi.ts`). No database migration.

@@ -1,8 +1,9 @@
-// Meta Conversions API (CAPI) — consent-gated, best-effort server-side Lead
-// measurement (playbook PROMPT 40 / build spec §39).
+// Meta Conversions API (CAPI) — consent-gated, best-effort server-side
+// conversion measurement (playbook PROMPT 40 / build spec §39).
 //
 // Hard rules:
-// - A Lead is sent ONLY after the caller's database operation has succeeded.
+// - A conversion event is sent ONLY after the caller's database operation
+//   has succeeded.
 // - Only the browser-attested consent flag unlocks measurement; a request
 //   without `meta: { consented: true }` never produces a CAPI call.
 // - Only approved fields are transmitted: event metadata plus client IP,
@@ -26,6 +27,18 @@ const MAX_META_FIELD_LENGTH = 1_024;
 const MAX_EVENT_ID_LENGTH = 128;
 
 export type MetaConversionType = "follower" | "trade_offer";
+
+// Final standard-event mapping after Meta Events Manager Core Setup /
+// data-sharing restrictions (2026-09-02), mirrored from lib/meta.ts.
+// Conversion identity travels in the STANDARD EVENT NAME itself — never in
+// URL paths or custom parameters (Core Setup may strip custom parameters,
+// so the old conversion_type tag is gone from the payload entirely).
+export type MetaStandardEvent = "CompleteRegistration" | "Lead";
+
+export const META_STANDARD_EVENTS: Readonly<Record<MetaConversionType, MetaStandardEvent>> = {
+  follower: "CompleteRegistration",
+  trade_offer: "Lead",
+};
 
 // Events Manager "Test events" codes: short alphanumerics only. Events sent
 // with this tag appear in Meta's test tool and are excluded from production
@@ -100,7 +113,7 @@ export function resolveMetaTestEventCode(
   return undefined;
 }
 
-export interface MetaLeadInput {
+export interface MetaConversionInput {
   conversionType: MetaConversionType;
   eventId: string;
   eventSourceUrl: string;
@@ -115,9 +128,11 @@ export interface MetaLeadInput {
 
 // The exact approved CAPI event payload, built in one place so the field
 // allow-list is visible and testable. IP/user-agent/fbp/fbc are sent
-// unhashed per the approved user_data fields for this integration.
-export function buildMetaLeadEvent(
-  input: MetaLeadInput,
+// unhashed per the approved user_data fields for this integration. The
+// event_name comes from META_STANDARD_EVENTS; there is deliberately NO
+// custom_data, since Core Setup may strip custom parameters.
+export function buildMetaConversionEvent(
+  input: MetaConversionInput,
   eventTimeUnix: number,
 ): Record<string, unknown> {
   const userData: Record<string, string> = {};
@@ -126,12 +141,11 @@ export function buildMetaLeadEvent(
   if (input.fbp) userData.fbp = input.fbp;
   if (input.fbc) userData.fbc = input.fbc;
   return {
-    event_name: "Lead",
+    event_name: META_STANDARD_EVENTS[input.conversionType],
     event_time: eventTimeUnix,
     event_id: input.eventId,
     event_source_url: input.eventSourceUrl,
     action_source: "website",
-    custom_data: { conversion_type: input.conversionType },
     user_data: userData,
   };
 }
@@ -143,7 +157,7 @@ export function metaEventsUrl(
   return `https://graph.facebook.com/${graphVersion}/${datasetId}/events`;
 }
 
-export interface MetaLeadResult {
+export interface MetaConversionResult {
   eventsReceived: number;
 }
 
@@ -151,9 +165,9 @@ const MAX_META_ERROR_DETAIL_LENGTH = 300;
 
 // Meta's error body ({error: {message, type, code}}) explains a rejection —
 // "Invalid OAuth access token", "Object with ID ... does not exist", invalid
-// parameter names — and is the only signal for why a Lead never reached
-// Events Manager. Only those three fields are kept (never the raw body),
-// so neither the token nor submission content can enter a log line.
+// parameter names — and is the only signal for why a conversion event never
+// reached Events Manager. Only those three fields are kept (never the raw
+// body), so neither the token nor submission content can enter a log line.
 export function sanitizedMetaErrorDetail(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const error = (payload as { error?: unknown }).error;
@@ -172,22 +186,23 @@ export function sanitizedMetaErrorDetail(payload: unknown): string {
   return parts.join(" | ").slice(0, MAX_META_ERROR_DETAIL_LENGTH);
 }
 
-// Sends one Lead through CAPI. Returns null when CAPI is not configured
-// (silent skip). Throws on transport/HTTP errors so callers can log a
-// sanitized error; callers must always catch — Meta failures never fail a
-// submission. The access token travels only in the Authorization header.
-export async function sendMetaLead(
+// Sends one conversion event through CAPI. Returns null when CAPI is not
+// configured (silent skip). Throws on transport/HTTP errors so callers can
+// log a sanitized error; callers must always catch — Meta failures never
+// fail a submission. The access token travels only in the Authorization
+// header.
+export async function sendMetaConversionEvent(
   config: MetaCapiConfig | null,
-  input: MetaLeadInput,
+  input: MetaConversionInput,
   fetchImpl: typeof fetch,
   options: {
     timeoutMs?: number;
     graphVersion?: string;
     nowSeconds?: () => number;
   } = {},
-): Promise<MetaLeadResult | null> {
+): Promise<MetaConversionResult | null> {
   if (!config) return null;
-  const event = buildMetaLeadEvent(
+  const event = buildMetaConversionEvent(
     input,
     (options.nowSeconds ?? (() => Math.floor(Date.now() / 1000)))(),
   );
@@ -208,7 +223,7 @@ export async function sendMetaLead(
     const payload = (await res.json().catch(() => null)) as unknown;
     const detail = sanitizedMetaErrorDetail(payload);
     throw new Error(
-      `Meta CAPI rejected the Lead (HTTP ${res.status}${detail ? `: ${detail}` : ""}).`,
+      `Meta CAPI rejected the ${String(event.event_name)} (HTTP ${res.status}${detail ? `: ${detail}` : ""}).`,
     );
   }
   const parsed = (await res.json().catch(() => null)) as {
@@ -231,35 +246,36 @@ function measurementContext(measurement: MetaMeasurement, testEventCode?: string
   return `event_id=${measurement.event_id}, ${testCode}`;
 }
 
-// Fire-and-log wrapper for Edge Function handlers: sends the Lead when
-// measurement metadata and CAPI config are present, and converts every
-// outcome into a sanitized log line so delivery is observable in the Edge
-// Function logs — a consented conversion that never reaches Meta must be
-// distinguishable from one Meta rejected (and why). Never throws, never
+// Fire-and-log wrapper for Edge Function handlers: sends the conversion
+// event when measurement metadata and CAPI config are present, and converts
+// every outcome into a sanitized log line so delivery is observable in the
+// Edge Function logs — a consented conversion that never reaches Meta must
+// be distinguishable from one Meta rejected (and why). Never throws, never
 // returns detail that could leak the access token or submission contents.
-export async function recordMetaLeadBestEffort(
+export async function recordMetaConversionBestEffort(
   env: (key: string) => string | undefined,
   measurement: MetaMeasurement | null,
-  input: Omit<MetaLeadInput, "eventId" | "fbp" | "fbc" | "testEventCode">,
+  input: Omit<MetaConversionInput, "eventId" | "fbp" | "fbc" | "testEventCode">,
   fetchImpl: typeof fetch,
   loggers: MetaCapiLoggers = {},
 ): Promise<void> {
   const log = loggers.log ?? ((message) => console.log(message));
   const logError = loggers.logError ?? ((message) => console.error(message));
   if (!measurement) return;
+  const eventName = META_STANDARD_EVENTS[input.conversionType];
   const testEventCode = resolveMetaTestEventCode(env, measurement.test_event_code);
   const context = measurementContext(measurement, testEventCode);
   const config = metaCapiConfig(env);
   if (!config) {
     // Consented conversion with no CAPI secrets: a silent skip here means
-    // the Lead never leaves the function, so this must be visible.
+    // the event never leaves the function, so this must be visible.
     logError(
       `meta-capi skipped: META_CAPI_ACCESS_TOKEN/META_DATASET_ID not configured (${context})`,
     );
     return;
   }
   try {
-    const result = await sendMetaLead(
+    const result = await sendMetaConversionEvent(
       config,
       {
         ...input,
@@ -272,9 +288,9 @@ export async function recordMetaLeadBestEffort(
     );
     if (!result) return;
     if (result.eventsReceived > 0) {
-      log(`meta-capi Lead accepted (events_received=${result.eventsReceived}, ${context})`);
+      log(`meta-capi ${eventName} accepted (events_received=${result.eventsReceived}, ${context})`);
     } else {
-      logError(`meta-capi Lead accepted but events_received=0 (${context})`);
+      logError(`meta-capi ${eventName} accepted but events_received=0 (${context})`);
     }
   } catch (err) {
     logError(`meta-capi failed: ${errorMessage(err)} (${context})`);

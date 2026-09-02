@@ -1,7 +1,9 @@
 // Meta Pixel + consent helpers — browser side (playbook PROMPT 40 / spec §39).
 // Covers checklist items 1–7 and 12–13: safe no-op without a Pixel ID,
-// consent gating, Lead-only-after-success ordering, conversion types,
-// shared event_id deduplication, and intact first-party analytics.
+// consent gating, conversion-only-after-success ordering, the final
+// standard-event mapping (follower → CompleteRegistration, trade_offer →
+// Lead, no custom parameters), shared event_id deduplication, and intact
+// first-party analytics.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -9,9 +11,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   META_CONSENT_STORAGE_KEY,
+  META_STANDARD_EVENTS,
   buildMetaRequestMetadata,
   captureMetaTestEventCode,
-  fireMetaLead,
+  fireMetaConversion,
   injectMetaPixel,
   metaMeasurementAllowed,
   metaPixelConfigured,
@@ -20,7 +23,7 @@ import {
   parseMetaConsent,
   readMetaAttributionCookies,
   readMetaTestEventCode,
-  trackMetaLead,
+  trackMetaConversion,
   validateMetaTestEventCode,
   withMetaTestEventCode,
 } from "../lib/meta.ts";
@@ -147,26 +150,35 @@ test("metaPixelScriptSource strips non-digits from the Pixel ID", () => {
   assert.ok(metaPixelScriptSource("123abc456").includes("fbq('init','123456');"));
 });
 
-// --- Lead events -----------------------------------------------------------------
+// --- standard-event mapping --------------------------------------------------------
 
-test("trackMetaLead fires the standard Lead with conversion_type and eventID", () => {
+test("META_STANDARD_EVENTS pins the final Events Manager mapping", () => {
+  assert.deepEqual(META_STANDARD_EVENTS, {
+    follower: "CompleteRegistration",
+    trade_offer: "Lead",
+  });
+});
+
+test("trackMetaConversion fires the mapped standard event with eventID and no custom params", () => {
   const { calls, ctx } = fakeFbq();
-  trackMetaLead("follower", "evt-1", ctx);
+  trackMetaConversion("follower", "evt-1", ctx);
+  trackMetaConversion("trade_offer", "evt-2", ctx);
   assert.deepEqual(calls, [
-    ["track", "Lead", { conversion_type: "follower" }, { eventID: "evt-1" }],
+    ["track", "CompleteRegistration", {}, { eventID: "evt-1" }],
+    ["track", "Lead", {}, { eventID: "evt-2" }],
   ]);
 });
 
-test("trackMetaLead rejects unknown conversion types and empty event ids", () => {
+test("trackMetaConversion rejects unknown conversion types and empty event ids", () => {
   const { calls, ctx } = fakeFbq();
-  trackMetaLead("purchase" as never, "evt-1", ctx);
-  trackMetaLead("follower", "", ctx);
+  trackMetaConversion("purchase" as never, "evt-1", ctx);
+  trackMetaConversion("follower", "", ctx);
   assert.equal(calls.length, 0);
 });
 
-test("trackMetaLead swallows Pixel failures", () => {
+test("trackMetaConversion swallows Pixel failures", () => {
   assert.doesNotThrow(() =>
-    trackMetaLead("follower", "evt-1", {
+    trackMetaConversion("follower", "evt-1", {
       fbq: () => {
         throw new Error("pixel blocked");
       },
@@ -174,15 +186,13 @@ test("trackMetaLead swallows Pixel failures", () => {
   );
 });
 
-test("fireMetaLead is consent-gated", () => {
+test("fireMetaConversion is consent-gated", () => {
   const { calls, ctx } = fakeFbq();
-  fireMetaLead("follower", "evt-1", fakeStorage("declined"), ctx);
-  fireMetaLead("follower", "evt-1", fakeStorage(), ctx);
+  fireMetaConversion("follower", "evt-1", fakeStorage("declined"), ctx);
+  fireMetaConversion("follower", "evt-1", fakeStorage(), ctx);
   assert.equal(calls.length, 0, "declined or unchosen consent fires nothing");
-  fireMetaLead("trade_offer", "evt-2", fakeStorage("allowed"), ctx);
-  assert.deepEqual(calls, [
-    ["track", "Lead", { conversion_type: "trade_offer" }, { eventID: "evt-2" }],
-  ]);
+  fireMetaConversion("trade_offer", "evt-2", fakeStorage("allowed"), ctx);
+  assert.deepEqual(calls, [["track", "Lead", {}, { eventID: "evt-2" }]]);
 });
 
 // --- attribution cookies -----------------------------------------------------------
@@ -279,8 +289,9 @@ test("the TEST52520 test URL reaches the request metadata and survives navigatio
 
 // --- end-to-end submission simulation -----------------------------------------------
 // Mirrors the exact ordering in follow-section.tsx / offer-form.tsx: metadata
-// is built before the request, and the Pixel Lead fires ONLY after the
-// backend confirms success — with the same event_id the server CAPI receives.
+// is built before the request, and the Pixel conversion event fires ONLY
+// after the backend confirms success — with the same event_id the server
+// CAPI receives.
 
 function simulateSubmission(opts: {
   conversionType: "follower" | "trade_offer";
@@ -307,13 +318,16 @@ function simulateSubmission(opts: {
   }
 
   // Component behavior: first-party track() always runs on success, the
-  // Pixel Lead only when metadata exists AND the backend succeeded.
-  if (backendOk && meta) fireMetaLead(opts.conversionType, meta.event_id, storage, ctx);
+  // Pixel conversion event only when metadata exists AND the backend
+  // succeeded.
+  if (backendOk && meta) {
+    fireMetaConversion(opts.conversionType, meta.event_id, storage, ctx);
+  }
 
   return { calls, serverMeasurement };
 }
 
-test("Pixel Lead does not fire when the backend submission fails", () => {
+test("Pixel conversion event does not fire when the backend submission fails", () => {
   const { calls, serverMeasurement } = simulateSubmission({
     conversionType: "follower",
     consent: "allowed",
@@ -324,26 +338,34 @@ test("Pixel Lead does not fire when the backend submission fails", () => {
   assert.ok(serverMeasurement);
 });
 
-test("successful follower signup fires exactly one follower Lead", () => {
+test("successful follower signup fires exactly one browser CompleteRegistration", () => {
   const { calls, serverMeasurement } = simulateSubmission({
     conversionType: "follower",
     consent: "allowed",
     backendSucceeds: true,
   });
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0][2], { conversion_type: "follower" });
-  // Browser Pixel eventID === server CAPI event_id (deduplication).
-  assert.deepEqual(calls[0][3], { eventID: serverMeasurement?.event_id });
+  assert.deepEqual(calls[0], [
+    "track",
+    "CompleteRegistration",
+    {},
+    { eventID: serverMeasurement?.event_id },
+  ]);
 });
 
-test("successful offer submission fires exactly one trade_offer Lead", () => {
-  const { calls } = simulateSubmission({
+test("successful offer submission fires exactly one browser Lead", () => {
+  const { calls, serverMeasurement } = simulateSubmission({
     conversionType: "trade_offer",
     consent: "allowed",
     backendSucceeds: true,
   });
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0][2], { conversion_type: "trade_offer" });
+  assert.deepEqual(calls[0], [
+    "track",
+    "Lead",
+    {},
+    { eventID: serverMeasurement?.event_id },
+  ]);
 });
 
 test("declined consent prevents all Meta measurement even on success", () => {
@@ -371,10 +393,10 @@ test("an Events Manager test session tags the server measurement", () => {
 // lib/analytics.ts uses the `@/` build alias, which node:test cannot
 // resolve — so instead of importing it, this test pins the actual wiring:
 // the first-party events still fire in both forms, in order, before the
-// consent-gated Meta Lead, and the analytics client itself stays a
-// Meta-free fire-and-forget design.
+// consent-gated Meta conversion event, and the analytics client itself
+// stays a Meta-free fire-and-forget design.
 
-test("first-party analytics intact; Pixel Lead fires only after backend success", () => {
+test("first-party analytics intact; Pixel conversion fires only after backend success", () => {
   const root = new URL("..", import.meta.url).pathname;
   const read = (path: string) =>
     readFileSync(join(root, path), "utf8");
@@ -394,21 +416,22 @@ test("first-party analytics intact; Pixel Lead fires only after backend success"
   assert.ok(!/meta/i.test(analytics));
 
   // Ordering in BOTH forms: awaited backend call → first-party track →
-  // consent-gated Pixel Lead. A Lead before backend success would invert
-  // these indexes.
+  // consent-gated Pixel conversion event. A conversion before backend
+  // success would invert these indexes.
   const followCall = follow.indexOf('"follow-signup"');
   const followTrack = follow.indexOf('track("follower_submitted")');
-  const followLead = follow.indexOf('fireMetaLead("follower"');
-  assert.ok(followCall !== -1 && followTrack !== -1 && followLead !== -1);
-  assert.ok(followCall < followTrack && followTrack < followLead);
+  const followConversion = follow.indexOf('fireMetaConversion("follower"');
+  assert.ok(followCall !== -1 && followTrack !== -1 && followConversion !== -1);
+  assert.ok(followCall < followTrack && followTrack < followConversion);
 
   const offerCall = offer.indexOf('"submit-offer"');
   const offerTrack = offer.indexOf('track("offer_submitted")');
-  const offerLead = offer.indexOf('fireMetaLead("trade_offer"');
-  assert.ok(offerCall !== -1 && offerTrack !== -1 && offerLead !== -1);
-  assert.ok(offerCall < offerTrack && offerTrack < offerLead);
+  const offerConversion = offer.indexOf('fireMetaConversion("trade_offer"');
+  assert.ok(offerCall !== -1 && offerTrack !== -1 && offerConversion !== -1);
+  assert.ok(offerCall < offerTrack && offerTrack < offerConversion);
 
-  // The Lead is consent-gated in both forms (meta metadata may be null).
-  assert.ok(follow.includes("if (meta) fireMetaLead"));
-  assert.ok(offer.includes("if (meta) fireMetaLead"));
+  // The conversion event is consent-gated in both forms (meta metadata may
+  // be null).
+  assert.ok(follow.includes("if (meta) fireMetaConversion"));
+  assert.ok(offer.includes("if (meta) fireMetaConversion"));
 });

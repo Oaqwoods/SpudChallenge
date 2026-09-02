@@ -1,23 +1,26 @@
 // Meta Conversions API helpers — server side (playbook PROMPT 40 / spec §39).
 // Covers checklist items 7–11: approved-fields-only payload, no PII,
-// optional fbp/fbc, failure isolation, shared event_id deduplication.
+// optional fbp/fbc, failure isolation, shared event_id deduplication — plus
+// the final standard-event mapping (follower → CompleteRegistration,
+// trade_offer → Lead, no custom parameters).
 
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
   META_GRAPH_VERSION,
-  buildMetaLeadEvent,
+  META_STANDARD_EVENTS,
+  buildMetaConversionEvent,
   metaCapiConfig,
   metaEventsUrl,
   parseMetaMeasurement,
-  recordMetaLeadBestEffort,
+  recordMetaConversionBestEffort,
   resolveMetaTestEventCode,
   sanitizedMetaErrorDetail,
-  sendMetaLead,
-  type MetaLeadInput,
+  sendMetaConversionEvent,
+  type MetaConversionInput,
 } from "../supabase/functions/_shared/meta-capi.ts";
 
-const FULL_INPUT: MetaLeadInput = {
+const FULL_INPUT: MetaConversionInput = {
   conversionType: "follower",
   eventId: "3f2c9a4e-9b1d-4e6a-8f0c-1a2b3c4d5e6f",
   eventSourceUrl: "https://spudchallenge.online/",
@@ -104,15 +107,21 @@ test("missing or oversized fbp/fbc never breaks a submission", () => {
 
 // --- payload construction ---------------------------------------------------
 
-test("buildMetaLeadEvent emits exactly the approved shape", () => {
-  const event = buildMetaLeadEvent(FULL_INPUT, 1_756_700_000);
+test("META_STANDARD_EVENTS pins the final Events Manager mapping", () => {
+  assert.deepEqual(META_STANDARD_EVENTS, {
+    follower: "CompleteRegistration",
+    trade_offer: "Lead",
+  });
+});
+
+test("buildMetaConversionEvent emits exactly the approved follower shape", () => {
+  const event = buildMetaConversionEvent(FULL_INPUT, 1_756_700_000);
   assert.deepEqual(event, {
-    event_name: "Lead",
+    event_name: "CompleteRegistration",
     event_time: 1_756_700_000,
     event_id: FULL_INPUT.eventId,
     event_source_url: FULL_INPUT.eventSourceUrl,
     action_source: "website",
-    custom_data: { conversion_type: "follower" },
     user_data: {
       client_ip_address: "203.0.113.7",
       client_user_agent: "TestAgent/1.0",
@@ -122,16 +131,27 @@ test("buildMetaLeadEvent emits exactly the approved shape", () => {
   });
 });
 
-test("trade_offer conversion_type is supported", () => {
-  const event = buildMetaLeadEvent(
+test("trade_offer maps to the Lead standard event", () => {
+  const event = buildMetaConversionEvent(
     { ...FULL_INPUT, conversionType: "trade_offer", eventSourceUrl: "https://spudchallenge.online/offer/" },
     1_756_700_000,
   );
-  assert.deepEqual(event.custom_data, { conversion_type: "trade_offer" });
+  assert.equal(event.event_name, "Lead");
+});
+
+test("no custom_data / conversion_type is ever transmitted", () => {
+  for (const conversionType of ["follower", "trade_offer"] as const) {
+    const event = buildMetaConversionEvent({ ...FULL_INPUT, conversionType }, 1);
+    assert.ok(!("custom_data" in event), `${conversionType} must not carry custom_data`);
+    assert.ok(
+      !JSON.stringify(event).includes("conversion_type"),
+      `${conversionType} must not carry the conversion_type tag`,
+    );
+  }
 });
 
 test("missing ip/agent/fbp/fbc produce an empty user_data, not an error", () => {
-  const event = buildMetaLeadEvent(
+  const event = buildMetaConversionEvent(
     {
       conversionType: "follower",
       eventId: "e1",
@@ -183,22 +203,36 @@ test("payload never carries PII or offer content keys", () => {
       collectKeys(child, into);
     }
   };
-  const keys = new Set<string>();
-  collectKeys(buildMetaLeadEvent(FULL_INPUT, 1), keys);
-  for (const key of keys) {
-    assert.ok(!forbiddenKeys.has(key), `payload must not carry key "${key}"`);
+  for (const conversionType of ["follower", "trade_offer"] as const) {
+    const keys = new Set<string>();
+    collectKeys(buildMetaConversionEvent({ ...FULL_INPUT, conversionType }, 1), keys);
+    for (const key of keys) {
+      assert.ok(!forbiddenKeys.has(key), `payload must not carry key "${key}" (${conversionType})`);
+    }
   }
-  // And no PII-shaped values sneak in anywhere.
-  const serialized = JSON.stringify(buildMetaLeadEvent(FULL_INPUT, 1));
+  // And no PII-shaped values sneak in anywhere. The follower payload is
+  // scanned directly; the trade_offer payload's approved source URL
+  // legitimately contains "offer", so it is stripped first.
+  const serialized = JSON.stringify(buildMetaConversionEvent(FULL_INPUT, 1));
   assert.ok(!serialized.includes("@"));
-  assert.ok(!/item|photo|offer/.test(serialized.replace("trade_offer", "")));
+  assert.ok(!/item|photo|offer/.test(serialized));
+  const offerSerialized = JSON.stringify(
+    buildMetaConversionEvent(
+      { ...FULL_INPUT, conversionType: "trade_offer", eventSourceUrl: "https://spudchallenge.online/offer/" },
+      1,
+    ),
+  ).replace("https://spudchallenge.online/offer/", "");
+  assert.ok(!offerSerialized.includes("@"));
+  assert.ok(!/item|photo|offer/.test(offerSerialized));
 });
 
 test("user_data only ever uses the approved field names", () => {
   const approved = new Set(["client_ip_address", "client_user_agent", "fbp", "fbc"]);
-  const event = buildMetaLeadEvent(FULL_INPUT, 1);
-  for (const key of Object.keys(event.user_data as Record<string, unknown>)) {
-    assert.ok(approved.has(key), `unexpected user_data field: ${key}`);
+  for (const conversionType of ["follower", "trade_offer"] as const) {
+    const event = buildMetaConversionEvent({ ...FULL_INPUT, conversionType }, 1);
+    for (const key of Object.keys(event.user_data as Record<string, unknown>)) {
+      assert.ok(approved.has(key), `unexpected user_data field: ${key}`);
+    }
   }
 });
 
@@ -212,9 +246,9 @@ function okFetch(captured: { url?: string; init?: RequestInit }) {
   }) as typeof fetch;
 }
 
-test("sendMetaLead skips silently when unconfigured", async () => {
+test("sendMetaConversionEvent skips silently when unconfigured", async () => {
   let called = false;
-  const result = await sendMetaLead(null, FULL_INPUT, (async () => {
+  const result = await sendMetaConversionEvent(null, FULL_INPUT, (async () => {
     called = true;
     return new Response("", { status: 200 });
   }) as typeof fetch);
@@ -222,10 +256,10 @@ test("sendMetaLead skips silently when unconfigured", async () => {
   assert.equal(called, false);
 });
 
-test("sendMetaLead posts one approved event with a bearer token", async () => {
+test("sendMetaConversionEvent posts one approved event with a bearer token", async () => {
   const captured: { url?: string; init?: RequestInit } = {};
   const config = { accessToken: "secret-token", datasetId: "1055342657299625" };
-  const result = await sendMetaLead(
+  const result = await sendMetaConversionEvent(
     config,
     FULL_INPUT,
     okFetch(captured),
@@ -242,10 +276,10 @@ test("sendMetaLead posts one approved event with a bearer token", async () => {
   assert.ok(!String(captured.init?.body).includes("secret-token"));
 });
 
-test("sendMetaLead throws on rejection without leaking the token", async () => {
+test("sendMetaConversionEvent throws on rejection without leaking the token", async () => {
   const config = { accessToken: "secret-token", datasetId: "123" };
   await assert.rejects(
-    sendMetaLead(config, FULL_INPUT, (async () =>
+    sendMetaConversionEvent(config, FULL_INPUT, (async () =>
       new Response("nope", { status: 500 })) as typeof fetch),
     (err: Error) => {
       assert.match(err.message, /500/);
@@ -286,7 +320,7 @@ test("sanitizedMetaErrorDetail keeps only message, type and code", () => {
   assert.equal(capped.length, 300);
 });
 
-test("sendMetaLead surfaces Meta's sanitized rejection reason", async () => {
+test("sendMetaConversionEvent surfaces Meta's sanitized rejection reason", async () => {
   const config = { accessToken: "secret-token", datasetId: "123" };
   const metaError = JSON.stringify({
     error: {
@@ -297,7 +331,7 @@ test("sendMetaLead surfaces Meta's sanitized rejection reason", async () => {
     },
   });
   await assert.rejects(
-    sendMetaLead(config, FULL_INPUT, (async () =>
+    sendMetaConversionEvent(config, FULL_INPUT, (async () =>
       new Response(metaError, { status: 400 })) as typeof fetch),
     (err: Error) => {
       assert.match(err.message, /HTTP 400/);
@@ -313,11 +347,11 @@ test("sendMetaLead surfaces Meta's sanitized rejection reason", async () => {
   );
 });
 
-test("sendMetaLead carries test_event_code top-level only, and only when valid", async () => {
+test("sendMetaConversionEvent carries test_event_code top-level only, and only when valid", async () => {
   const config = { accessToken: "tok", datasetId: "123" };
   const captured: { init?: RequestInit } = {};
 
-  await sendMetaLead(config, { ...FULL_INPUT, testEventCode: "EAG84721" }, okFetch(captured), {
+  await sendMetaConversionEvent(config, { ...FULL_INPUT, testEventCode: "EAG84721" }, okFetch(captured), {
     nowSeconds: () => 1,
   });
   let body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
@@ -325,22 +359,23 @@ test("sendMetaLead carries test_event_code top-level only, and only when valid",
   // The tag lives at the top level of the request, never inside the event.
   const event = (body.data as Array<Record<string, unknown>>)[0];
   assert.ok(!("test_event_code" in event));
-  assert.deepEqual(event.custom_data, { conversion_type: "follower" });
+  assert.equal(event.event_name, "CompleteRegistration");
+  assert.ok(!("custom_data" in event));
 
   // No code → no tag in the body at all.
-  await sendMetaLead(config, FULL_INPUT, okFetch(captured), { nowSeconds: () => 1 });
+  await sendMetaConversionEvent(config, FULL_INPUT, okFetch(captured), { nowSeconds: () => 1 });
   body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
   assert.ok(!("test_event_code" in body));
 
   // Malformed codes are never forwarded.
-  await sendMetaLead(config, { ...FULL_INPUT, testEventCode: "bad/code" }, okFetch(captured), {
+  await sendMetaConversionEvent(config, { ...FULL_INPUT, testEventCode: "bad/code" }, okFetch(captured), {
     nowSeconds: () => 1,
   });
   body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
   assert.ok(!("test_event_code" in body));
 });
 
-test("recordMetaLeadBestEffort never throws and logs sanitized errors", async () => {
+test("recordMetaConversionBestEffort never throws and logs sanitized errors", async () => {
   const env = (key: string) =>
     key === "META_CAPI_ACCESS_TOKEN" ? "secret-token" : key === "META_DATASET_ID" ? "123" : undefined;
   const logs: string[] = [];
@@ -352,13 +387,13 @@ test("recordMetaLeadBestEffort never throws and logs sanitized errors", async ()
   };
 
   // No consent metadata → no call and no log line at all.
-  await recordMetaLeadBestEffort(env, null, input, okFetch({}), {
+  await recordMetaConversionBestEffort(env, null, input, okFetch({}), {
     logError: (m) => logs.push(m),
   });
   assert.equal(logs.length, 0);
 
   // Meta outage → swallowed, sanitized log, no token/body in the log.
-  await recordMetaLeadBestEffort(
+  await recordMetaConversionBestEffort(
     env,
     { event_id: "e1" },
     input,
@@ -370,10 +405,10 @@ test("recordMetaLeadBestEffort never throws and logs sanitized errors", async ()
   assert.ok(!logs[0].includes("secret-token"));
 });
 
-test("recordMetaLeadBestEffort makes a missing CAPI config visible", async () => {
+test("recordMetaConversionBestEffort makes a missing CAPI config visible", async () => {
   const logs: string[] = [];
   let called = false;
-  await recordMetaLeadBestEffort(
+  await recordMetaConversionBestEffort(
     () => undefined,
     { event_id: "e1", test_event_code: "EAG84721" },
     {
@@ -394,7 +429,7 @@ test("recordMetaLeadBestEffort makes a missing CAPI config visible", async () =>
   assert.match(logs[0], /META_CAPI_ACCESS_TOKEN\/META_DATASET_ID not configured/);
 });
 
-test("recordMetaLeadBestEffort logs the delivery outcome", async () => {
+test("recordMetaConversionBestEffort logs the delivery outcome", async () => {
   const env = (key: string) =>
     key === "META_CAPI_ACCESS_TOKEN" ? "tok" : key === "META_DATASET_ID" ? "123" : undefined;
   const input = {
@@ -406,16 +441,16 @@ test("recordMetaLeadBestEffort logs the delivery outcome", async () => {
 
   // Accepted → events_received + dedup context are visible in the log.
   const info: string[] = [];
-  await recordMetaLeadBestEffort(env, { event_id: "e1" }, input, okFetch({}), {
+  await recordMetaConversionBestEffort(env, { event_id: "e1" }, input, okFetch({}), {
     log: (m) => info.push(m),
   });
   assert.deepEqual(info, [
-    "meta-capi Lead accepted (events_received=1, event_id=e1, test_event_code=absent)",
+    "meta-capi CompleteRegistration accepted (events_received=1, event_id=e1, test_event_code=absent)",
   ]);
 
   // Accepted but zero events received → warning on the error channel.
   const errors: string[] = [];
-  await recordMetaLeadBestEffort(
+  await recordMetaConversionBestEffort(
     env,
     { event_id: "e1" },
     input,
@@ -424,7 +459,7 @@ test("recordMetaLeadBestEffort logs the delivery outcome", async () => {
     { logError: (m) => errors.push(m) },
   );
   assert.deepEqual(errors, [
-    "meta-capi Lead accepted but events_received=0 (event_id=e1, test_event_code=absent)",
+    "meta-capi CompleteRegistration accepted but events_received=0 (event_id=e1, test_event_code=absent)",
   ]);
 });
 
@@ -445,7 +480,7 @@ test("TEST52520 rides end-to-end into the top-level CAPI body field", async () =
     fbp: "fb.1.1700000000000.abcdef",
     test_event_code: "TEST52520",
   };
-  await recordMetaLeadBestEffort(
+  await recordMetaConversionBestEffort(
     env,
     parseMetaMeasurement(browserMeta),
     {
@@ -465,7 +500,7 @@ test("TEST52520 rides end-to-end into the top-level CAPI body field", async () =
   assert.equal(event.event_id, "shared-event-id");
 
   assert.deepEqual(info, [
-    "meta-capi Lead accepted (events_received=1, event_id=shared-event-id, test_event_code=present)",
+    "meta-capi CompleteRegistration accepted (events_received=1, event_id=shared-event-id, test_event_code=present)",
   ]);
   // The log line carries only the approved context — never fbp/fbc, the
   // token, or the test code itself.
@@ -474,11 +509,11 @@ test("TEST52520 rides end-to-end into the top-level CAPI body field", async () =
   assert.ok(!info[0].includes("TEST52520"));
 });
 
-test("recordMetaLeadBestEffort reuses the browser event_id for dedup", async () => {
+test("recordMetaConversionBestEffort reuses the browser event_id for dedup", async () => {
   const captured: { init?: RequestInit } = {};
   const env = (key: string) =>
     key === "META_CAPI_ACCESS_TOKEN" ? "tok" : key === "META_DATASET_ID" ? "123" : undefined;
-  await recordMetaLeadBestEffort(
+  await recordMetaConversionBestEffort(
     env,
     { event_id: "shared-event-id", fbp: "fbp-value" },
     {
@@ -493,14 +528,15 @@ test("recordMetaLeadBestEffort reuses the browser event_id for dedup", async () 
     data: Array<Record<string, unknown>>;
   };
   assert.equal(body.data[0].event_id, "shared-event-id");
-  assert.deepEqual(body.data[0].custom_data, { conversion_type: "trade_offer" });
+  assert.equal(body.data[0].event_name, "Lead");
+  assert.ok(!("custom_data" in body.data[0]));
 });
 
-test("recordMetaLeadBestEffort forwards the test session tag for CAPI events", async () => {
+test("recordMetaConversionBestEffort forwards the test session tag for CAPI events", async () => {
   const captured: { init?: RequestInit } = {};
   const env = (key: string) =>
     key === "META_CAPI_ACCESS_TOKEN" ? "tok" : key === "META_DATASET_ID" ? "123" : undefined;
-  await recordMetaLeadBestEffort(
+  await recordMetaConversionBestEffort(
     env,
     { event_id: "shared-event-id", test_event_code: "EAG84721" },
     {
@@ -545,7 +581,7 @@ test("META_TEST_EVENT_CODE env fallback tags the CAPI body when the browser send
         : key === "META_TEST_EVENT_CODE"
           ? "ENVCODE1"
           : undefined;
-  await recordMetaLeadBestEffort(
+  await recordMetaConversionBestEffort(
     env,
     { event_id: "e1" },
     {
@@ -562,7 +598,7 @@ test("META_TEST_EVENT_CODE env fallback tags the CAPI body when the browser send
   const event = (body.data as Array<Record<string, unknown>>)[0];
   assert.ok(!("test_event_code" in event), "the tag must stay top-level, not in the event");
   assert.deepEqual(info, [
-    "meta-capi Lead accepted (events_received=1, event_id=e1, test_event_code=present)",
+    "meta-capi CompleteRegistration accepted (events_received=1, event_id=e1, test_event_code=present)",
   ]);
   assert.ok(!info[0].includes("ENVCODE1"), "the code itself never enters the log");
 });
@@ -577,7 +613,7 @@ test("browser-provided test code wins over the META_TEST_EVENT_CODE env fallback
         : key === "META_TEST_EVENT_CODE"
           ? "ENVCODE1"
           : undefined;
-  await recordMetaLeadBestEffort(
+  await recordMetaConversionBestEffort(
     env,
     { event_id: "shared-event-id", test_event_code: "TEST52520" },
     {
@@ -597,7 +633,7 @@ test("no test code anywhere sends a normal production CAPI event", async () => {
   const info: string[] = [];
   const env = (key: string) =>
     key === "META_CAPI_ACCESS_TOKEN" ? "tok" : key === "META_DATASET_ID" ? "123" : undefined;
-  await recordMetaLeadBestEffort(
+  await recordMetaConversionBestEffort(
     env,
     { event_id: "e1" },
     {
@@ -612,6 +648,6 @@ test("no test code anywhere sends a normal production CAPI event", async () => {
   const body = JSON.parse(String(captured.init?.body)) as Record<string, unknown>;
   assert.ok(!("test_event_code" in body), "no tag anywhere in the request");
   assert.deepEqual(info, [
-    "meta-capi Lead accepted (events_received=1, event_id=e1, test_event_code=absent)",
+    "meta-capi CompleteRegistration accepted (events_received=1, event_id=e1, test_event_code=absent)",
   ]);
 });

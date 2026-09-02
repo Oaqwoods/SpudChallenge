@@ -7,7 +7,7 @@ import { useChallenge } from "@/components/challenge-provider";
 import { useNow } from "@/hooks/use-now";
 import { track } from "@/lib/analytics";
 import { DEFAULT_SETTINGS, getPhase } from "@/lib/challenge";
-import { buildMetaRequestMetadata, fireMetaLead } from "@/lib/meta";
+import { buildMetaRequestMetadata, fireMetaConversion } from "@/lib/meta";
 import { callEdgeFunction, EdgeFunctionError, getSupabase } from "@/lib/supabase";
 import { readUtm } from "@/lib/utm";
 import { formatUsd } from "@/lib/format";
@@ -271,6 +271,7 @@ export function OfferForm() {
       // Optional, consent-gated Meta measurement metadata (prompt 40). The
       // same event_id is reused by the browser Pixel Lead AFTER the backend
       // confirms success, so Meta can deduplicate Pixel + Conversions API.
+      // (trade_offer maps to the Meta standard event "Lead".)
       const meta = buildMetaRequestMetadata();
       const result = await callEdgeFunction<{ ok?: boolean; prelaunch?: boolean }>(
         "submit-offer",
@@ -305,7 +306,7 @@ export function OfferForm() {
       setAcceptedPrelaunch(result.prelaunch === true);
       setStatus("success");
       track("offer_submitted");
-      if (meta) fireMetaLead("trade_offer", meta.event_id);
+      if (meta) fireMetaConversion("trade_offer", meta.event_id);
     } catch (err) {
       if (
         err instanceof EdgeFunctionError &&

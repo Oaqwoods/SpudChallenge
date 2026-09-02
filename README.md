@@ -230,13 +230,17 @@ choice and after a Decline. With an explicit Allow:
 - the Meta Pixel (`NEXT_PUBLIC_META_PIXEL_ID`, public GitHub Actions
   variable) loads in the browser — standard init only, no Advanced
   Matching, PageView after init;
-- successful follower signups and offer submissions fire a Meta `Lead`
-  (`conversion_type` of `follower` / `trade_offer`) in the browser **and**
-  server-side through the Conversions API from the `follow-signup` /
-  `submit-offer` Edge Functions, deduplicated by one shared `event_id`;
-- only the conversion tag, page URL, event ID, IP/user-agent and Meta's own
-  `_fbp`/`_fbc` cookies are transmitted — never emails, phone numbers,
-  names, offer text or photos.
+- a successful follower signup fires the Meta standard event
+  `CompleteRegistration`, and a successful offer submission fires the Meta
+  standard event `Lead` — each in the browser **and** server-side through
+  the Conversions API from the `follow-signup` / `submit-offer` Edge
+  Functions, deduplicated by one shared `event_id`. Conversion identity
+  lives in the standard event name itself: Meta Events Manager Core Setup
+  may strip custom parameters, so no `conversion_type` tag is sent and
+  nothing depends on URL paths;
+- only the standard event name, page URL, event ID, IP/user-agent and
+  Meta's own `_fbp`/`_fbc` cookies are transmitted — never emails, phone
+  numbers, names, offer text or photos.
 
 Secrets `META_CAPI_ACCESS_TOKEN` and `META_DATASET_ID` live only in
 Supabase Edge Function secrets (Graph API version pinned to v25.0 in
@@ -247,11 +251,11 @@ a Meta failure can never fail a signup or an offer. See
 For Meta Events Manager **Test events**: open the site via the tool so the
 URL carries `?test_event_code=…`. The code survives internal navigations
 (session capture + URL restore) and is forwarded server-side, so both the
-browser Pixel events and the CAPI Leads show up tagged in the test tool
-and stay out of production statistics. As a temporary pre-launch fallback,
-the `META_TEST_EVENT_CODE` Edge Function secret also tags server-side Leads
-when no code arrives from the browser (a browser-attested code always wins;
-unset it after testing).
+browser Pixel events and the CAPI conversion events show up tagged in the
+test tool and stay out of production statistics. As a temporary pre-launch
+fallback, the `META_TEST_EVENT_CODE` Edge Function secret also tags
+server-side conversion events when no code arrives from the browser (a
+browser-attested code always wins; unset it after testing).
 
 ## Project structure
 
